@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Audit Log & Session History</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/modern-normalize/2.0.0/modern-normalize.min.css">
+    <style>
+        body { font-family: 'Segoe UI', Arial, sans-serif; background: #f7f7f7; margin: 0; padding: 0; }
+        .container { max-width: 1100px; margin: 40px auto; background: #fff; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.07); padding: 32px; }
+        h1 { font-size: 2rem; margin-bottom: 24px; }
+        table { width: 100%; border-collapse: collapse; margin-bottom: 24px; }
+        th, td { padding: 10px 12px; border-bottom: 1px solid #e0e0e0; text-align: left; }
+        th { background: #f0f0f0; }
+        tr:hover { background: #f9f9f9; cursor: pointer; }
+        .details { background: #fafbfc; border: 1px solid #e0e0e0; border-radius: 6px; padding: 18px; margin-top: 18px; }
+        .logs-table, .events-table { width: 100%; margin-top: 10px; font-size: 0.97em; }
+        .logs-table th, .events-table th { background: #f5f5f5; }
+        .logs-table td, .events-table td { word-break: break-all; }
+        .back-btn { display: inline-block; margin-bottom: 18px; color: #0078d7; text-decoration: none; font-weight: 500; }
+        .back-btn:hover { text-decoration: underline; }
+        .tag { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 0.9em; color: #fff; }
+        .tag.low { background: #4caf50; }
+        .tag.medium { background: #ffc107; color: #333; }
+        .tag.high { background: #f44336; }
+        @media (max-width: 700px) {
+            .container { padding: 10px; }
+            table, .logs-table, .events-table { font-size: 0.95em; }
+        }
+        .nav-bar {
+            background-color: #0078d7;
+            padding: 10px 0;
+            text-align: center;
+        }
+        .nav-btn {
+            color: white;
+            text-decoration: none;
+            padding: 10px 20px;
+            margin: 0 5px;
+            border-radius: 5px;
+            transition: background-color 0.3s;
+        }
+        .nav-btn:hover {
+            background-color: #005fa3;
+        }
+        .nav-btn.active {
+            background-color: #005fa3;
+        }
+    </style>
+</head>
+<body>
+<div class="nav-bar">
+    <a href="/" class="nav-btn">Main Dashboard</a>
+    <a href="/audit" class="nav-btn active">Audit Log</a>
+</div>
+<div class="container">
+    <h1>Audit Log & Session History</h1>
+    <div id="sessions-view">
+        <table id="sessions-table">
+            <thead>
+                <tr>
+                    <th>Session ID</th>
+                    <th>Start Time</th>
+                    <th>End Time</th>
+                    <th>Total Records</th>
+                    <th>Threats</th>
+                    <th>Type</th>
+                    <th>Report</th>
+                </tr>
+            </thead>
+            <tbody id="sessions-tbody">
+                <tr><td colspan="7">Loading...</td></tr>
+            </tbody>
+        </table>
+    </div>
+    <div id="details-view" style="display:none;"></div>
+</div>
+<script>
+const API_BASE = '/api/audit';
+const sessionsTbody = document.getElementById('sessions-tbody');
+const sessionsView = document.getElementById('sessions-view');
+const detailsView = document.getElementById('details-view');
+
+function escapeHtml(text) {
+    return text.replace(/[&<>"']/g, function(m) {
+        return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[m];
+    });
+}
+
+function fetchSessions() {
+    fetch(`${API_BASE}/sessions`).then(r => r.json()).then(data => {
+        if (!Array.isArray(data) || data.length === 0) {
+            sessionsTbody.innerHTML = '<tr><td colspan="7">No sessions found.</td></tr>';
+            return;
+        }
+        sessionsTbody.innerHTML = '';
+        data.forEach(session => {
+            const tr = document.createElement('tr');
+            tr.innerHTML = `
+                <td>${session.session_id}</td>
+                <td>${session.start_time ? new Date(session.start_time).toLocaleString() : ''}</td>
+                <td>${session.end_time ? new Date(session.end_time).toLocaleString() : ''}</td>
+                <td>${session.total_records ?? ''}</td>
+                <td>
+                    <span class="tag low">${session.threat_distribution?.Low ?? 0}</span>
+                    <span class="tag medium">${session.threat_distribution?.Medium ?? 0}</span>
+                    <span class="tag high">${session.threat_distribution?.High ?? 0}</span>
+                </td>
+                <td>${escapeHtml(session.analysis_type ?? '')}</td>
+                <td>${session.report_path ? `<a href="/${session.report_path}" target="_blank">PDF</a>` : ''}</td>
+            `;
+            tr.onclick = () => showSessionDetails(session.session_id);
+            sessionsTbody.appendChild(tr);
+        });
+    });
+}
+
+function showSessionDetails(sessionId) {
+    fetch(`${API_BASE}/session/${sessionId}`).then(r => r.json()).then(data => {
+        sessionsView.style.display = 'none';
+        detailsView.style.display = '';
+        detailsView.innerHTML = `
+            <a class="back-btn" href="#" onclick="goBack();return false;">&larr; Back to Sessions</a>
+            <div class="details">
+                <h2>Session Details</h2>
+                <p><b>Session ID:</b> ${data.session_id}</p>
+                <p><b>Start Time:</b> ${data.start_time ? new Date(data.start_time).toLocaleString() : ''}</p>
+                <p><b>End Time:</b> ${data.end_time ? new Date(data.end_time).toLocaleString() : ''}</p>
+                <p><b>Total Records:</b> ${data.total_records ?? ''}</p>
+                <p><b>Threat Distribution:</b> 
+                    <span class="tag low">Low: ${data.threat_distribution?.Low ?? 0}</span>
+                    <span class="tag medium">Medium: ${data.threat_distribution?.Medium ?? 0}</span>
+                    <span class="tag high">High: ${data.threat_distribution?.High ?? 0}</span>
+                </p>
+                <p><b>Analysis Type:</b> ${escapeHtml(data.analysis_type ?? '')}</p>
+                <p><b>Report:</b> ${data.report_path ? `<a href="/${data.report_path}" target="_blank">Download PDF</a>` : 'N/A'}</p>
+                <h3>Logs</h3>
+                <table class="logs-table">
+                    <thead><tr><th>Log</th><th>Threat</th><th>Confidence</th><th>Timestamp</th></tr></thead>
+                    <tbody>
+                        ${data.logs.map(log => `
+                            <tr>
+                                <td>${escapeHtml(log.log_text ?? '').slice(0, 80)}${log.log_text && log.log_text.length > 80 ? '...' : ''}</td>
+                                <td><span class="tag ${log.threat_level?.toLowerCase()}">${escapeHtml(log.threat_level ?? '')}</span></td>
+                                <td>${log.confidence !== undefined ? (log.confidence * 100).toFixed(1) + '%' : ''}</td>
+                                <td>${log.timestamp ? new Date(log.timestamp).toLocaleString() : ''}</td>
+                            </tr>
+                        `).join('')}
+                    </tbody>
+                </table>
+                <h3>Events</h3>
+                <table class="events-table">
+                    <thead><tr><th>Type</th><th>Details</th><th>Timestamp</th></tr></thead>
+                    <tbody>
+                        ${data.events.map(ev => `
+                            <tr>
+                                <td>${escapeHtml(ev.event_type ?? '')}</td>
+                                <td>${JSON.stringify(ev.event_details)}</td>
+                                <td>${ev.timestamp ? new Date(ev.timestamp).toLocaleString() : ''}</td>
+                            </tr>
+                        `).join('')}
+                    </tbody>
+                </table>
+            </div>
+        `;
+    });
+}
+
+function goBack() {
+    detailsView.style.display = 'none';
+    sessionsView.style.display = '';
+}
+
+fetchSessions();
+</script>
+</body>
+</html> 
