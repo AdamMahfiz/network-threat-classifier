@@ -4,7 +4,9 @@ Main Flask application
 """
 
 import os
-from flask import Flask, render_template, request, jsonify, redirect, url_for, flash
+import time
+import threading
+from flask import Flask, render_template, request, redirect, url_for, flash, send_file, jsonify
 from flask_cors import CORS
 import pandas as pd
 import numpy as np
@@ -19,11 +21,9 @@ import uuid
 from sqlalchemy.orm import joinedload
 from reportlab.lib.units import inch
 from flask_mail import Mail, Message
-from flask_socketio import SocketIO, emit
-import time
-from sqlalchemy import func
-import eventlet
-eventlet.monkey_patch()
+import psutil
+from scapy.all import sniff
+from reportlab.pdfgen import canvas
 
 # Load environment variables
 load_dotenv()
@@ -39,6 +39,13 @@ app = Flask(__name__, static_folder='static', static_url_path='/static')
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'dev-secret-key')
 app.config['UPLOAD_FOLDER'] = 'uploads'
 app.config['MAX_CONTENT_LENGTH'] = 100 * 1024 * 1024  # Increased to 100MB
+app.config['MAIL_SERVER'] = 'smtp.example.com'
+app.config['MAIL_PORT'] = 587
+app.config['MAIL_USE_TLS'] = True
+app.config['MAIL_USERNAME'] = 'your_email@example.com'
+app.config['MAIL_PASSWORD'] = 'your_password'
+app.config['MAIL_DEFAULT_SENDER'] = 'your_email@example.com'
+mail = Mail(app)
 
 # Enable CORS
 CORS(app)
@@ -72,242 +79,83 @@ try:
 except Exception as e:
     logger.error(f"Failed to initialize database: {str(e)}")
 
-# --- Flask-Mail config ---
-app.config['MAIL_SERVER'] = os.getenv('MAIL_SERVER', 'smtp.gmail.com')
-app.config['MAIL_PORT'] = int(os.getenv('MAIL_PORT', '587'))
-app.config['MAIL_USE_TLS'] = os.getenv('MAIL_USE_TLS', 'True').lower() == 'true'
-app.config['MAIL_USERNAME'] = os.getenv('MAIL_USERNAME', 'your_email@gmail.com')
-app.config['MAIL_PASSWORD'] = os.getenv('MAIL_PASSWORD', 'your_app_password')
-app.config['MAIL_DEFAULT_SENDER'] = os.getenv('MAIL_DEFAULT_SENDER', os.getenv('MAIL_USERNAME', 'your_email@gmail.com'))
-app.config['MAIL_RECIPIENT'] = os.getenv('MAIL_RECIPIENT', 'recipient@example.com')
-mail = Mail(app)
-
-# --- Flask-SocketIO setup ---
-socketio = SocketIO(app, cors_allowed_origins="*", logger=True, engineio_logger=True)
-
-# Load model and processor at startup
+# Load model and scaler
 MODEL_PATH = 'models/nsl_kdd_model.pkl'
-PROCESSOR_PATH = 'models/nsl_kdd_processor.pkl'
-model = None
-processor = None
-if os.path.exists(MODEL_PATH) and os.path.exists(PROCESSOR_PATH):
-    model = joblib.load(MODEL_PATH)
-    processor = joblib.load(PROCESSOR_PATH)
-else:
-    print("Model or processor not found. Please train the model first.")
+SCALER_PATH = 'models/scaler.pkl'
+model = joblib.load(MODEL_PATH)
+scaler = joblib.load(SCALER_PATH)
 
-# Live traffic monitoring variables
-monitoring_active = False
-traffic_counter = 0
-last_traffic_time = time.time()
-last_high_threat_time = 0  # Track last high threat alert
-last_ddos_alert_time = 0   # Track last DDoS alert
-ALERT_COOLDOWN = 300  # 5 minutes between alerts
+# Historical data storage
+HISTORICAL_DATA = []
+ALERTS = []
+TRAFFIC_HISTORY = []
 
-@socketio.on('connect')
-def handle_connect():
-    print('Client connected')
+# Thresholds
+HIGH_THREAT_LABELS = ['high', 'critical', 'attack', 'dos']
+TRAFFIC_ALERT_THRESHOLD = 1000  # packets per minute (example)
 
-@socketio.on('disconnect')
-def handle_disconnect():
-    print('Client disconnected')
-
-@socketio.on('start_monitoring')
-def handle_start_monitoring():
-    global monitoring_active
-    monitoring_active = True
-    print('Live traffic monitoring started')
-    print('Starting background monitoring thread...')
-    # Start background monitoring thread
-    import threading
-    monitoring_thread = threading.Thread(target=monitor_traffic)
-    monitoring_thread.daemon = True
-    monitoring_thread.start()
-    print('Background monitoring thread started')
-
-@socketio.on('stop_monitoring')
-def handle_stop_monitoring():
-    global monitoring_active
-    monitoring_active = False
-    print('Live traffic monitoring stopped')
-
-def monitor_traffic():
-    """Background thread for monitoring live network traffic"""
-    global traffic_counter, last_traffic_time, last_high_threat_time, last_ddos_alert_time
-
-    while monitoring_active:
-        try:
-            # Simulate network traffic (replace with real packet capture)
-            import random
-            import time
-
-            # Generate simulated traffic data
-            source_ip = f"192.168.1.{random.randint(1, 254)}"
-            dest_ip = f"10.0.0.{random.randint(1, 254)}"
-            protocols = ['TCP', 'UDP', 'ICMP']
-            protocol = random.choice(protocols)
-
-            # Simulate threat levels with realistic distribution
-            # 85% low, 12% medium, 3% high (more realistic)
-            threat_rand = random.random()
-            if threat_rand < 0.85:
-                threat_level = 'low'
-            elif threat_rand < 0.97:
-                threat_level = 'medium'
-            else:
-                threat_level = 'high'
-
-            # Calculate packets per second
-            current_time = time.time()
-            packets_per_sec = random.randint(10, 1000)
-
-            traffic_data = {
-                'source_ip': source_ip,
-                'dest_ip': dest_ip,
-                'protocol': protocol,
-                'threat_level': threat_level,
-                'packets_per_sec': packets_per_sec,
-                'timestamp': time.strftime('%H:%M:%S')
-            }
-
-            # Emit traffic update
-            print(f"Emitting traffic update: {traffic_data}")
-            socketio.emit('traffic_update', traffic_data)
-
-            # Check for high threat with cooldown
-            current_time = time.time()
-            if threat_level == 'high' and (current_time - last_high_threat_time) > ALERT_COOLDOWN:
-                socketio.emit('threat_detected', {
-                    'message': f'High threat traffic detected from {source_ip}'
-                })
-                # Send email alert
-                send_email_alert(
-                    'High Threat Detected in Live Traffic',
-                    f'High threat traffic detected from {source_ip} to {dest_ip} using {protocol}'
-                )
-                last_high_threat_time = current_time
-
-            # Check for DDoS (high packet rate) with cooldown
-            ddos_threshold = int(os.getenv('DDOS_THRESHOLD', '1000'))  # Lowered to 1000 packets/sec
-            if packets_per_sec > ddos_threshold and (current_time - last_ddos_alert_time) > ALERT_COOLDOWN:
-                ddos_msg = f'DDoS attack detected! {packets_per_sec} packets/sec from {source_ip}'
-                socketio.emit('ddos_alert', {'message': ddos_msg})
-                send_email_alert('DDoS Attack Alert', ddos_msg)
-                last_ddos_alert_time = current_time
-
-            traffic_counter += 1
-            last_traffic_time = current_time
-
-            # Sleep for 1 second
-            time.sleep(1)
-
-        except Exception as e:
-            print(f"Error in traffic monitoring: {e}")
-            time.sleep(1)
-
-def allowed_file(filename):
-    """Check if file extension is allowed"""
-    ALLOWED_EXTENSIONS = {'txt', 'csv', 'log'}
-    return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
-
+# Helper: Send email
 def send_email_alert(subject, body):
     try:
-        # Get system information
-        import platform
-        import socket
-        
-        # Create machine-like email content
-        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S UTC")
-        hostname = socket.gethostname()
-        system_info = f"{platform.system()} {platform.release()}"
-        
-        # Enhanced email body with machine-like formatting
-        enhanced_body = f"""
-=== NETWORK THREAT CLASSIFICATION SYSTEM ALERT ===
-Timestamp: {timestamp}
-System: {hostname} ({system_info})
-Alert Type: {subject}
-
-DETAILS:
-{body}
-
----
-This is an automated alert from the Network Threat Classification System.
-System ID: {hostname}-{platform.machine()}
-Generated: {timestamp}
-        """.strip()
-        
-        # Use application context for background threads
-        with app.app_context():
-            msg = Message(
-                subject=f"[ALERT] {subject} - {timestamp}",
-                recipients=[app.config['MAIL_RECIPIENT']]
-            )
-            msg.body = enhanced_body
-            mail.send(msg)
-            print(f"Email alert sent: {subject}")
-            logger.info(f"Email alert sent successfully: {subject}")
+        msg = Message(subject, recipients=['recipient@example.com'])
+        msg.body = body
+        mail.send(msg)
     except Exception as e:
-        print(f"Failed to send email: {e}")
-        logger.error(f"Email sending failed: {str(e)}")
+        print(f"Email send failed: {e}")
 
-def emit_realtime_alert(message):
-    socketio.emit('high_threat_alert', {'message': message})
+# Helper: Generate PDF report
+def generate_pdf_report(data, filename):
+    c = canvas.Canvas(filename)
+    c.drawString(100, 800, "Threat Analysis Report")
+    y = 780
+    for entry in data[-20:]:
+        c.drawString(100, y, str(entry))
+        y -= 20
+    c.save()
 
-def predict_from_dataframe(df):
-    if processor is None or model is None:
-        return 'Model not loaded', None
-    try:
-        X = processor.transform(df)
-        preds = model.predict(X)
-        probs = model.predict_proba(X)
-        df['prediction'] = preds
-        df['confidence'] = probs.max(axis=1)
-        low = (preds == 0).sum()
-        medium = (preds == 1).sum()
-        high = (preds == 2).sum()
-        # Only alert for High
-        if high > 0:
-            alert_msg = f"High threat detected! {high} high threat(s) in upload."
-            send_email_alert("High Threat Alert", alert_msg)
-            emit_realtime_alert(alert_msg)
-        return f"Low: {low}, Medium: {medium}, High: {high}", df[['prediction', 'confidence']]
-    except Exception as e:
-        return f"Prediction error: {str(e)}", None
+# Threat classification (dummy, replace with real feature extraction)
+def classify(features):
+    X = scaler.transform([features])
+    pred = model.predict(X)[0]
+    return pred
+
+# Live traffic monitor (runs in background)
+def monitor_traffic():
+    global TRAFFIC_HISTORY
+    while True:
+        count = 0
+        def count_packet(pkt):
+            nonlocal count
+            count += 1
+        sniff(timeout=60, prn=count_packet, store=0)
+        TRAFFIC_HISTORY.append((datetime.now(), count))
+        if count > TRAFFIC_ALERT_THRESHOLD:
+            ALERTS.append({'time': datetime.now().strftime('%Y-%m-%d %H:%M:%S'), 'type': 'DDoS', 'level': 'critical', 'msg': f'High traffic detected: {count} packets/min'})
+            send_email_alert('DDoS Alert', f'High traffic detected: {count} packets/min')
+
+# Start traffic monitor thread
+def start_traffic_monitor():
+    t = threading.Thread(target=monitor_traffic, daemon=True)
+    t.start()
+
+start_traffic_monitor()
 
 @app.route('/', methods=['GET', 'POST'])
 def index():
-    """Main page"""
-    result = None
-    details = None
     if request.method == 'POST':
-        # Handle file upload
-        if 'file' in request.files and request.files['file'].filename != '':
-            file = request.files['file']
-            if file and allowed_file(file.filename):
-                filename = secure_filename(file.filename)
-                filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
-                os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
-                file.save(filepath)
-                try:
-                    df = pd.read_csv(filepath, names=NSLKDDProcessor().feature_names + ['label'], index_col=False)
-                    result, details = predict_from_dataframe(df)
-                except Exception as e:
-                    flash(f"File processing error: {str(e)}")
-            else:
-                flash('Invalid file type. Only .txt and .csv allowed.')
-        # Handle pasted text
-        elif 'logtext' in request.form and request.form['logtext'].strip() != '':
-            logtext = request.form['logtext']
-            try:
-                from io import StringIO
-                df = pd.read_csv(StringIO(logtext), names=NSLKDDProcessor().feature_names + ['label'], index_col=False)
-                result, details = predict_from_dataframe(df)
-            except Exception as e:
-                flash(f"Text processing error: {str(e)}")
-        else:
-            flash('No file or text provided.')
-    return render_template('index.html', result=result, details=details)
+        file = request.files.get('logfile')
+        if file:
+            df = pd.read_csv(file)
+            for _, row in df.iterrows():
+                features = row.values.tolist()
+                pred = classify(features)
+                HISTORICAL_DATA.append({'time': datetime.now().strftime('%Y-%m-%d %H:%M:%S'), 'features': features, 'prediction': pred})
+                if str(pred).lower() in HIGH_THREAT_LABELS:
+                    ALERTS.append({'time': datetime.now().strftime('%Y-%m-%d %H:%M:%S'), 'type': 'Threat', 'level': pred, 'msg': f'High threat detected: {pred}'})
+                    send_email_alert('High Threat Alert', f'High threat detected: {pred}')
+            flash('File processed and threats classified.')
+            return redirect(url_for('index'))
+    return render_template('index.html', alerts=ALERTS[-10:], trends=HISTORICAL_DATA[-50:])
 
 @app.route('/health')
 def health():
@@ -612,6 +460,11 @@ def upload_file():
         if 'db_session' in locals():
             db_session.close()
 
+def allowed_file(filename):
+    """Check if file extension is allowed"""
+    ALLOWED_EXTENSIONS = {'txt', 'csv', 'log'}
+    return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
+
 def process_uploaded_file(filepath, session_id, db_session):
     """Process uploaded file with better error handling and NSL-KDD support"""
     try:
@@ -890,40 +743,19 @@ def get_session_details(session_id):
 def audit_page():
     return render_template('audit.html')
 
-@app.route('/live_traffic')
-def live_traffic():
-    """Live traffic monitoring page"""
-    return render_template('live_traffic.html')
+@app.route('/download_report')
+def download_report():
+    filename = f'static/reports/report_{datetime.now().strftime("%Y%m%d_%H%M%S")}.pdf'
+    generate_pdf_report(HISTORICAL_DATA, filename)
+    return send_file(filename, as_attachment=True)
 
-@app.route('/api/trends', methods=['GET'])
-def get_trends():
-    """Return threat counts for the past 30 days"""
-    db_session = db.get_session()
-    try:
-        from datetime import datetime, timedelta
-        now = datetime.utcnow()
-        start_date = now - timedelta(days=30)
-        # Query all log entries in the last 30 days
-        logs = db_session.query(LogEntry).filter(LogEntry.timestamp >= start_date).all()
-        # Group by day and threat level
-        trends = {}
-        for log in logs:
-            day = log.timestamp.date().isoformat()
-            level = log.threat_level
-            if day not in trends:
-                trends[day] = {'Low': 0, 'Medium': 0, 'High': 0}
-            if level in trends[day]:
-                trends[day][level] += 1
-        # Convert to sorted list
-        trend_list = []
-        for day in sorted(trends.keys()):
-            trend_list.append({'date': day, **trends[day]})
-        return jsonify(trend_list)
-    except Exception as e:
-        logger.error(f"Error fetching trends: {str(e)}")
-        return jsonify({'error': str(e)}), 500
-    finally:
-        db_session.close()
+@app.route('/api/alerts')
+def api_alerts():
+    return jsonify(ALERTS[-20:])
+
+@app.route('/api/trends')
+def api_trends():
+    return jsonify(HISTORICAL_DATA[-50:])
 
 if __name__ == '__main__':
     # Train model if not already trained
@@ -931,5 +763,5 @@ if __name__ == '__main__':
         logger.info("Training initial model...")
         classifier.train()
         logger.info("Model training completed")
-    print("\nServer running! Open http://127.0.0.1:5000/ in your browser.\n")
-    socketio.run(app, debug=True)
+    
+    app.run(debug=True, host='0.0.0.0', port=5000)
