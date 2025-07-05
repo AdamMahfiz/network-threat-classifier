@@ -1,3 +1,4 @@
+# Python
 __pycache__/
 *.py[cod]
 *$py.class
@@ -9,11 +10,31 @@ env/
 .venv
 pip-log.txt
 pip-delete-this-directory.txt
+
+# Testing
 .coverage
 htmlcov/
 .pytest_cache/
 .mypy_cache/
+
+# Logs
 *.log
+logs/
+
+# Data
 uploads/
 models/trained/
 data/raw/
+data/interim/
+
+# IDE
+.vscode/settings.json
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Project specific
+outputs/
+experiments/

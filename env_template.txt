@@ -1,0 +1,12 @@
+# Email Configuration
+MAIL_SERVER=smtp.gmail.com
+MAIL_PORT=587
+MAIL_USE_TLS=True
+MAIL_USERNAME=your_email@gmail.com
+MAIL_PASSWORD=your_app_password
+MAIL_DEFAULT_SENDER=your_email@gmail.com
+MAIL_RECIPIENT=recipient@example.com
+
+# Network Monitoring Configuration
+TRAFFIC_THRESHOLD=1000
+DDOS_THRESHOLD=5000 
