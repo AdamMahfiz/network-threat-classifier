@@ -1,40 +1,1727 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <title>Network Threat Classifier Dashboard</title>
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
-</head>
-<body>
-<div class="container mt-4">
-    <h1>Network Threat Classifier</h1>
-    <form method="post" enctype="multipart/form-data">
-        <div class="mb-3">
-            <label for="logfile" class="form-label">Upload Log File (CSV):</label>
-            <input class="form-control" type="file" name="logfile" id="logfile" required>
+{% extends "base.html" %}
+
+{% block title %}Dashboard - Network Threat Classifier{% endblock %}
+
+{% block extra_css %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js" defer></script>
+    <style>
+
+        /* Container and Cards */
+        .container {
+            max-width: 1400px;
+            padding: 2rem 1rem;
+        }
+
+        .card {
+            background: var(--card-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 16px;
+            box-shadow: var(--shadow-medium);
+            transition: all 0.3s ease;
+            overflow: hidden;
+        }
+
+        .card:hover {
+            transform: translateY(-4px);
+            box-shadow: var(--shadow-heavy);
+            border-color: var(--accent-blue);
+        }
+
+        .card-header {
+            background: linear-gradient(135deg, rgba(59, 130, 246, 0.1), rgba(29, 78, 216, 0.1));
+            border-bottom: 1px solid var(--border-color);
+            padding: 1.5rem;
+        }
+
+        .card-body {
+            padding: 1.5rem;
+        }
+
+        /* Upload Section */
+        .upload-section {
+            background: linear-gradient(135deg, var(--card-bg), #2d3748);
+            border: 2px dashed var(--border-color);
+            border-radius: 20px;
+            padding: 2rem;
+            text-align: center;
+            transition: all 0.3s ease;
+            margin-bottom: 2rem;
+        }
+
+        .upload-section:hover {
+            border-color: var(--accent-blue);
+            background: linear-gradient(135deg, var(--card-bg), #374151);
+        }
+
+        .upload-icon {
+            font-size: 3rem;
+            color: var(--accent-blue);
+            margin-bottom: 1rem;
+        }
+
+        .form-control, .form-select {
+            background: var(--secondary-bg);
+            border: 1px solid var(--border-color);
+            color: var(--text-primary);
+            border-radius: 12px;
+            padding: 0.75rem 1rem;
+            transition: all 0.3s ease;
+        }
+
+        .form-control:focus, .form-select:focus {
+            background: var(--secondary-bg);
+            border-color: var(--accent-blue);
+            color: var(--text-primary);
+            box-shadow: 0 0 0 0.2rem rgba(59, 130, 246, 0.25);
+        }
+
+        .form-control::placeholder {
+            color: var(--text-secondary);
+        }
+
+        /* Buttons */
+        .btn {
+            border-radius: 12px;
+            font-weight: 600;
+            padding: 0.75rem 1.5rem;
+            transition: all 0.3s ease;
+            border: none;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .btn::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+            transition: left 0.5s;
+        }
+
+        .btn:hover::before {
+            left: 100%;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, var(--accent-blue), #1d4ed8);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: linear-gradient(135deg, #2563eb, var(--accent-blue));
+            transform: translateY(-2px);
+            box-shadow: var(--shadow-medium);
+        }
+
+        .btn-success {
+            background: linear-gradient(135deg, var(--accent-green), #059669);
+            color: white;
+        }
+
+        .btn-success:hover {
+            background: linear-gradient(135deg, #34d399, var(--accent-green));
+            transform: translateY(-2px);
+            box-shadow: var(--shadow-medium);
+        }
+
+        .btn-secondary {
+            background: linear-gradient(135deg, #64748b, #475569);
+            color: white;
+        }
+
+        .btn-secondary:hover {
+            background: linear-gradient(135deg, #94a3b8, #64748b);
+            transform: translateY(-2px);
+            box-shadow: var(--shadow-medium);
+        }
+
+        /* Summary Cards */
+        .summary-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 1.5rem;
+            margin-bottom: 2rem;
+        }
+
+        .summary-card {
+            background: linear-gradient(135deg, var(--card-bg), #2d3748);
+            border-radius: 20px;
+            padding: 2rem;
+            text-align: center;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .summary-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 4px;
+            background: linear-gradient(90deg, var(--accent-blue), var(--accent-green));
+        }
+
+        .summary-value {
+            font-size: 3rem;
+            font-weight: 700;
+            margin-bottom: 0.5rem;
+            background: linear-gradient(135deg, var(--text-primary), var(--text-secondary));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .summary-label {
+            font-size: 1rem;
+            color: var(--text-secondary);
+            font-weight: 500;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .summary-total { color: var(--primary-color); }
+        .summary-low { color: #10b981; }
+        .summary-medium { color: #f59e0b; }
+        .summary-high { color: #ef4444; }
+        
+        /* Dark mode adjustments for summary colors */
+        [data-theme="dark"] .summary-low { color: #34d399; }
+        [data-theme="dark"] .summary-medium { color: #fbbf24; }
+        [data-theme="dark"] .summary-high { color: #f87171; }
+
+        /* Charts Section */
+        .charts-section {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+            gap: 2rem;
+            margin-bottom: 2rem;
+        }
+
+        .chart-card {
+            background: var(--card-bg);
+            border-radius: 20px;
+            padding: 2rem;
+            box-shadow: var(--shadow-medium);
+        }
+
+        .chart-title {
+            font-size: 1.25rem;
+            font-weight: 600;
+            margin-bottom: 1.5rem;
+            color: var(--text-primary);
+            display: flex;
+            align-items: center;
+        }
+
+        .chart-title i {
+            margin-right: 0.75rem;
+            color: var(--accent-blue);
+        }
+
+        .chart-card, .chart-container {
+            height: 340px;
+            min-height: 300px;
+            max-height: 400px;
+        }
+        #pieChart, #trendChart {
+            height: 240px !important;
+            max-height: 300px;
+        }
+
+        /* Progress Bar */
+        .progress-container {
+            background: var(--secondary-bg);
+            border-radius: 12px;
+            overflow: hidden;
+            margin-bottom: 1rem;
+        }
+
+        .progress-bar {
+            background: linear-gradient(90deg, var(--accent-blue), #1d4ed8);
+            height: 8px;
+            border-radius: 12px;
+            transition: width 0.3s ease;
+        }
+
+        /* Responsive Design */
+        @media (max-width: 768px) {
+            .container {
+                padding: 1rem 0.5rem;
+            }
+            
+            .summary-grid {
+                grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+                gap: 1rem;
+            }
+            
+            .charts-section {
+                grid-template-columns: 1fr;
+            }
+            
+            .alerts-section {
+                grid-template-columns: 1fr;
+            }
+            
+            .summary-value {
+                font-size: 2.5rem;
+            }
+        }
+
+        /* Loading Animation */
+        .loading {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid var(--border-color);
+            border-radius: 50%;
+            border-top-color: var(--accent-blue);
+            animation: spin 1s ease-in-out infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        /* Fade In Animation */
+        .fade-in {
+            animation: fadeIn 0.6s ease-in;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+
+
+        /* Responsive Design */
+        @media (max-width: 768px) {
+            .threat-stats {
+                flex-direction: column;
+            }
+            
+            .threat-stat {
+                min-width: auto;
+            }
+            
+            .result-card {
+                margin-bottom: 1rem;
+            }
+        }
+
+        /* Responsive animations and state indicators */
+        .socket-connected .status-indicator::before {
+            content: '🟢 ';
+            animation: pulse 2s infinite;
+        }
+        
+        .socket-disconnected .status-indicator::before {
+            content: '🔴 ';
+            animation: blink 1s infinite;
+        }
+        
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+        
+        @keyframes blink {
+            0%, 50% { opacity: 1; }
+            51%, 100% { opacity: 0; }
+        }
+        
+        /* Smooth transitions for all interactive elements */
+        .card, .btn, .form-control, .alert {
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        
+        .card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 25px rgba(0,0,0,0.15);
+        }
+        
+        /* Loading states */
+        .loading-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.5);
+            display: none;
+            justify-content: center;
+            align-items: center;
+            z-index: 9999;
+        }
+        
+        .loading-spinner {
+            width: 50px;
+            height: 50px;
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #007bff;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+        
+        /* Micro-interactions */
+        .btn:active {
+            transform: scale(0.98);
+        }
+        
+        .form-control:focus {
+            transform: scale(1.02);
+            box-shadow: 0 0 0 3px rgba(0,123,255,0.25);
+        }
+        
+        /* Progress bar enhancements */
+        .progress {
+            height: 8px;
+            border-radius: 10px;
+            overflow: hidden;
+            background: linear-gradient(90deg, #f8f9fa 0%, #e9ecef 100%);
+        }
+        
+        .progress-bar {
+            background: linear-gradient(90deg, #007bff 0%, #0056b3 100%);
+            border-radius: 10px;
+            transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .progress-bar::after {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            bottom: 0;
+            right: 0;
+            background: linear-gradient(90deg, transparent, rgba(255,255,255,0.3), transparent);
+            animation: shimmer 2s infinite;
+        }
+        
+        @keyframes shimmer {
+            0% { transform: translateX(-100%); }
+            100% { transform: translateX(100%); }
+        }
+        
+        /* Performance optimizations */
+        * {
+            will-change: auto;
+        }
+        
+        .chart-container {
+            contain: layout style paint;
+        }
+        
+        /* Connection status indicators */
+        .connection-status {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            padding: 0.75rem 1rem;
+            border-radius: 0.5rem;
+            color: white;
+            font-weight: 500;
+            z-index: 9999;
+            animation: slideInRight 0.3s ease-out;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+            backdrop-filter: blur(10px);
+        }
+        
+        .connection-status.connected {
+            background: linear-gradient(135deg, #28a745, #20c997);
+        }
+        
+        .connection-status.disconnected {
+            background: linear-gradient(135deg, #dc3545, #fd7e14);
+            animation: pulse 2s infinite;
+        }
+        
+        .connection-status.error {
+            background: linear-gradient(135deg, #dc3545, #e83e8c);
+            animation: shake 0.5s ease-in-out;
+        }
+        
+        @keyframes slideInRight {
+            from {
+                transform: translateX(100%);
+                opacity: 0;
+            }
+            to {
+                transform: translateX(0);
+                opacity: 1;
+            }
+        }
+        
+        @keyframes shake {
+            0%, 100% { transform: translateX(0); }
+            25% { transform: translateX(-5px); }
+            75% { transform: translateX(5px); }
+        }
+        
+        /* Enhanced loading states */
+        .loading-skeleton {
+            background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+            background-size: 200% 100%;
+            animation: loading-shimmer 1.5s infinite;
+        }
+        
+        @keyframes loading-shimmer {
+            0% { background-position: -200% 0; }
+            100% { background-position: 200% 0; }
+        }
+        
+        /* Lazy loading fade-in */
+        .lazy-loaded {
+            animation: fadeInUp 0.6s ease-out;
+        }
+        
+        @keyframes fadeInUp {
+            from {
+                opacity: 0;
+                transform: translateY(20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+        
+        /* Mobile optimizations */
+        @media (max-width: 768px) {
+            .card:hover {
+                transform: none; /* Disable hover effects on mobile */
+            }
+            
+            .form-control:focus {
+                transform: none;
+            }
+            
+            .connection-status {
+                top: 10px;
+                right: 10px;
+                padding: 0.5rem 0.75rem;
+                font-size: 0.875rem;
+            }
+        }
+        
+        /* Reduce animations on low-end devices */
+        @media (prefers-reduced-motion: reduce) {
+            * {
+                animation-duration: 0.01ms !important;
+                animation-iteration-count: 1 !important;
+                transition-duration: 0.01ms !important;
+            }
+            
+            .connection-status {
+                animation: none !important;
+            }
+        }
+    </style>
+{% endblock %}
+
+{% block content %}
+        <!-- Upload Section -->
+        <div class="upload-section fade-in">
+            <div class="upload-icon">
+                <i class="fas fa-cloud-upload-alt"></i>
+            </div>
+            <h3 class="mb-4">Analyze Network Logs</h3>
+            <div class="row g-4">
+                <div class="col-md-6">
+                    <div class="progress-container" id="progressBarContainer" style="display:none;">
+                        <div class="progress-bar" id="analyzeProgressBar" style="width: 0%"></div>
+                    </div>
+                    <form method="post" enctype="multipart/form-data" action="/api/upload">
+                        <div class="mb-3">
+                            <label for="logfile" class="form-label">
+                                <i class="fas fa-file-upload me-2"></i>Upload File
+                            </label>
+                            <input class="form-control" type="file" name="file" id="logfile" required>
+                        </div>
+                        <button class="btn btn-primary w-100" type="submit">
+                            <i class="fas fa-upload me-2"></i>Upload & Analyze
+                        </button>
+                    </form>
+                </div>
+                <div class="col-md-6">
+                    <div class="mb-3">
+                        <label for="logtext" class="form-label">
+                            <i class="fas fa-paste me-2"></i>Paste Logs
+                        </label>
+                        <textarea class="form-control" id="logtext" rows="4" placeholder="Paste your network logs here..."></textarea>
+                    </div>
+                    <div class="d-flex gap-2">
+                        <button class="btn btn-success flex-fill" onclick="analyzeText()">
+                            <i class="fas fa-search me-2"></i>Analyze Text
+                        </button>
+                        <button class="btn btn-secondary" onclick="generateSample()">
+                            <i class="fas fa-magic me-2"></i>Sample
+                        </button>
+                    </div>
+                </div>
+            </div>
         </div>
-        <button class="btn btn-primary" type="submit">Upload & Analyze</button>
-        <a href="/download_report" class="btn btn-success ms-2">Download PDF Report</a>
-    </form>
-    <hr>
-    <h2>Live Alerts</h2>
-    <ul class="list-group">
-        {% for alert in alerts %}
-        <li class="list-group-item list-group-item-danger">
-            <strong>{{ alert.time }}</strong>: {{ alert.msg }} ({{ alert.level }})
-        </li>
-        {% endfor %}
-    </ul>
-    <hr>
-    <h2>Threat Trends</h2>
-    <table class="table table-striped">
-        <thead><tr><th>Time</th><th>Prediction</th></tr></thead>
-        <tbody>
-        {% for entry in trends %}
-        <tr><td>{{ entry.time }}</td><td>{{ entry.prediction }}</td></tr>
-        {% endfor %}
-        </tbody>
-    </table>
-</div>
-</body>
-</html>
+
+        <!-- Summary Cards -->
+        <div class="summary-grid fade-in">
+            <div class="summary-card">
+                <div class="summary-value summary-total" id="totalLogs">0</div>
+                <div class="summary-label">Total Logs</div>
+            </div>
+            <div class="summary-card">
+                <div class="summary-value summary-low" id="lowCount">0</div>
+                <div class="summary-label">Low Threat</div>
+            </div>
+            <div class="summary-card">
+                <div class="summary-value summary-medium" id="mediumCount">0</div>
+                <div class="summary-label">Medium Threat</div>
+            </div>
+            <div class="summary-card">
+                <div class="summary-value summary-high" id="highCount">0</div>
+                <div class="summary-label">High Threat</div>
+            </div>
+        </div>
+
+        <!-- Charts Section -->
+        <div class="charts-section fade-in">
+            <div class="chart-card">
+                <div class="chart-title">
+                    <i class="fas fa-chart-pie"></i>
+                    Threat Distribution
+                </div>
+                <canvas id="pieChart" style="height:240px !important; max-height:300px;"></canvas>
+            </div>
+            <div class="chart-card">
+                <div class="chart-title">
+                    <i class="fas fa-chart-line"></i>
+                    Threat Trends (Last 30 Days)
+                </div>
+                <canvas id="trendChart" style="height:240px !important; max-height:300px;"></canvas>
+            </div>
+        </div>
+
+        <!-- Real-Time Monitoring Section -->
+        <div class="mt-4 fade-in">
+            <h4 class="mb-4 text-center">
+                <i class="fas fa-broadcast-tower me-2" style="color: var(--accent-blue);"></i>
+                Real-Time Network Monitoring
+                <span class="badge bg-success ms-2" id="monitoringStatus">Live</span>
+            </h4>
+            
+            <!-- Real-Time Summary Cards -->
+            <div class="summary-grid mb-4">
+                <div class="summary-card">
+                    <div class="summary-value" id="livePacketCount" style="color: var(--accent-blue);">0</div>
+                    <div class="summary-label">Live Packets/sec</div>
+                </div>
+                <div class="summary-card">
+                    <div class="summary-value" id="liveAlertCount" style="color: var(--danger-red);">0</div>
+                    <div class="summary-label">Active Alerts</div>
+                </div>
+                <div class="summary-card">
+                    <div class="summary-value" id="liveConnectionCount" style="color: var(--success-green);">0</div>
+                    <div class="summary-label">Active Connections</div>
+                </div>
+                <div class="summary-card">
+                    <div class="summary-value" id="liveThreatLevel" style="color: var(--warning-yellow);">LOW</div>
+                    <div class="summary-label">Threat Level</div>
+                </div>
+            </div>
+
+            <!-- Real-Time Charts -->
+            <div class="charts-section">
+                <div class="chart-card">
+                    <div class="chart-title">
+                        <i class="fas fa-chart-area"></i>
+                        Live Traffic Volume
+                        <span class="badge bg-primary ms-2" id="trafficStatus">Monitoring</span>
+                    </div>
+                    <canvas id="liveTrafficChart" style="height:240px !important; max-height:300px;"></canvas>
+                </div>
+                <div class="chart-card">
+                    <div class="chart-title">
+                        <i class="fas fa-exclamation-triangle"></i>
+                        Live Threat Alerts
+                        <span class="badge bg-warning ms-2" id="alertsStatus">Active</span>
+                    </div>
+                    <canvas id="liveAlertsChart" style="height:240px !important; max-height:300px;"></canvas>
+                </div>
+            </div>
+
+            <!-- Protocol Distribution and Recent Alerts -->
+            <div class="charts-section mt-4">
+                <div class="chart-card">
+                    <div class="chart-title">
+                        <i class="fas fa-network-wired"></i>
+                        Protocol Distribution
+                    </div>
+                    <canvas id="protocolChart" style="height:240px !important; max-height:300px;"></canvas>
+                </div>
+                <div class="chart-card">
+                    <div class="chart-title">
+                        <i class="fas fa-bell"></i>
+                        Recent Alerts
+                    </div>
+                    <div id="recentAlertsList" style="height:240px; overflow-y: auto; padding: 1rem;">
+                        <div class="text-center text-muted">
+                            <i class="fas fa-clock me-2"></i>
+                            Waiting for live alerts...
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+
+
+    <script src="https://cdn.socket.io/4.7.4/socket.io.min.js" defer></script>
+    <script>
+        let pieChart = null;
+        let trendChart = null;
+        let liveTrafficChart = null;
+        let liveAlertsChart = null;
+        let protocolChart = null;
+        
+        // Real-time data storage
+        let trafficData = [];
+        let alertsData = [];
+        let protocolData = { TCP: 0, UDP: 0, ICMP: 0, HTTP: 0, HTTPS: 0, Other: 0 };
+        let recentAlerts = [];
+        
+        // Chart data limits
+        const MAX_DATA_POINTS = 20;
+        const MAX_ALERTS = 10;
+
+        // Get theme-appropriate colors
+        function getThemeColors() {
+            const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+            return {
+                tooltipBg: isDark ? '#2d3748' : '#ffffff',
+                tooltipTitle: isDark ? '#f7fafc' : '#2d3748',
+                tooltipBody: isDark ? '#e2e8f0' : '#4a5568',
+                tooltipBorder: isDark ? '#4a5568' : '#e2e8f0',
+                gridColor: isDark ? '#4a5568' : '#e2e8f0'
+            };
+        }
+
+        // Wait for Chart.js to load before initializing
+        document.addEventListener('DOMContentLoaded', function() {
+            // Initialize charts with dark theme
+            Chart.defaults.color = '#94a3b8';
+            Chart.defaults.borderColor = '#334155';
+
+        // Update chart colors when theme changes
+        function updateChartColors() {
+            // Destroy existing charts and recreate them with new colors
+            if (window.pieChart) {
+                window.pieChart.destroy();
+                window.pieChart = null;
+            }
+            if (window.trendChart) {
+                window.trendChart.destroy();
+                window.trendChart = null;
+            }
+            // Reload dashboard to recreate charts with new theme colors
+             window.updateDashboardForLatestSession();
+        }
+        
+        window.updatePieChart = function() {
+            if (!window.pieChart) return;
+            fetch('/api/audit/sessions')
+                .then(r => {
+                    if (!r.ok) throw new Error(`HTTP error! status: ${r.status}`);
+                    return r.json();
+                })
+                .then(sessions => {
+                    if (!sessions || sessions.length === 0) {
+                        // If no sessions, fetch pie chart data without session_id
+                        return fetch('/api/pie');
+                    }
+                    const latestSessionId = sessions[0].session_id;
+                    return fetch(`/api/pie?session_id=${latestSessionId}`);
+                })
+                .then(r => {
+                    // Check if r is defined (could be undefined if no sessions)
+                    if (!r) {
+                        console.log('No response object - likely no sessions available');
+                        return { low: 0, medium: 0, high: 0 };
+                    }
+                    if (!r.ok) throw new Error(`HTTP error! status: ${r.status}`);
+                    return r.json();
+                })
+                .then(data => {
+                    if (window.pieChart && window.pieChart.data && window.pieChart.data.datasets) {
+                        window.pieChart.data.datasets[0].data = [data.low, data.medium, data.high];
+                        window.pieChart.update();
+                    }
+                })
+                .catch(err => console.error('Error updating pie chart:', err));
+        }
+
+        window.updateTrendChart = function() {
+            if (!window.trendChart) return;
+            // Use aggregated DB data for the last 30 days
+            fetch('/api/trends')
+                .then(r => {
+                    if (!r.ok) throw new Error(`HTTP error! status: ${r.status}`);
+                    return r.json();
+                })
+                .then(data => {
+                    if (window.trendChart) {
+                        const labels = data.map(d => d.date);
+                        const lows = data.map(d => d.low);
+                        const meds = data.map(d => d.medium);
+                        const highs = data.map(d => d.high);
+                        if (window.trendChart && window.trendChart.data && window.trendChart.data.datasets) {
+                            window.trendChart.data.labels = labels;
+                            window.trendChart.data.datasets[0].data = lows;
+                            window.trendChart.data.datasets[1].data = meds;
+                            window.trendChart.data.datasets[2].data = highs;
+                            window.trendChart.update();
+                        }
+                    }
+                })
+                .catch(err => console.error('Error updating trend chart:', err));
+        }
+
+        window.updateDashboardForLatestSession = function() {
+            fetch('/api/audit/sessions')
+                .then(r => {
+                    if (!r.ok) throw new Error(`HTTP error! status: ${r.status}`);
+                    return r.json();
+                })
+                .then(sessions => {
+                    if (!sessions || sessions.length === 0) return;
+                    if (!sessions[0] || !sessions[0].session_id) {
+                        console.warn('No valid session found with session_id');
+                        return;
+                    }
+                    const latestSessionId = sessions[0].session_id;
+                // Pie chart
+                fetch(`/api/pie?session_id=${latestSessionId}`)
+                    .then(r => {
+                        if (!r.ok) throw new Error(`HTTP error! status: ${r.status}`);
+                        return r.json();
+                    })
+                    .then(data => {
+                    document.getElementById('lowCount').textContent = data.low;
+                    document.getElementById('mediumCount').textContent = data.medium;
+                    document.getElementById('highCount').textContent = data.high;
+                    document.getElementById('totalLogs').textContent = data.low + data.medium + data.high;
+                    const ctx = document.getElementById('pieChart').getContext('2d');
+                    if (window.pieChart && window.pieChart.data && window.pieChart.data.datasets) {
+                        window.pieChart.data.datasets[0].data = [data.low, data.medium, data.high];
+                        window.pieChart.update();
+                    } else {
+                        const pieChart = new Chart(ctx, {
+                            type: 'doughnut',
+                            data: {
+                                labels: ['Low', 'Medium', 'High'],
+                                datasets: [{
+                                    data: [data.low, data.medium, data.high],
+                                    backgroundColor: ['#10b981', '#f59e0b', '#ef4444'],
+                                    borderWidth: 0,
+                                    hoverOffset: 4
+                                }]
+                            },
+                            options: {
+                                responsive: true,
+                                maintainAspectRatio: false,
+                                plugins: {
+                                    legend: { 
+                                        position: 'bottom',
+                                        labels: {
+                                            padding: 20,
+                                            usePointStyle: true,
+                                            font: {
+                                                size: 12,
+                                                family: 'Inter'
+                                            }
+                                        }
+                                    },
+                                    tooltip: {
+                                        backgroundColor: getThemeColors().tooltipBg,
+                                        titleColor: getThemeColors().tooltipTitle,
+                                        bodyColor: getThemeColors().tooltipBody,
+                                        borderColor: getThemeColors().tooltipBorder,
+                                        borderWidth: 1,
+                                        cornerRadius: 8
+                                    }
+                                }
+                            }
+                        });
+                        window.pieChart = pieChart;
+                    }
+                })
+                .catch(err => {
+                    console.error('Error updating pie chart and summary cards:', err);
+                    // Set default values if API fails
+                    document.getElementById('lowCount').textContent = '0';
+                    document.getElementById('mediumCount').textContent = '0';
+                    document.getElementById('highCount').textContent = '0';
+                    document.getElementById('totalLogs').textContent = '0';
+                });
+                // Trend chart: aggregated DB data (last 30 days)
+                fetch('/api/trends').then(r => r.json()).then(data => {
+                    const ctx = document.getElementById('trendChart').getContext('2d');
+                    const labels = data.map(d => d.date);
+                    const lows = data.map(d => d.low);
+                    const meds = data.map(d => d.medium);
+                    const highs = data.map(d => d.high);
+                    if (window.trendChart && window.trendChart.data && window.trendChart.data.datasets) {
+                        window.trendChart.data.labels = labels;
+                        window.trendChart.data.datasets[0].data = lows;
+                        window.trendChart.data.datasets[1].data = meds;
+                        window.trendChart.data.datasets[2].data = highs;
+                        window.trendChart.update();
+                    } else {
+                        const trendChart = new Chart(ctx, {
+                            type: 'line',
+                            data: {
+                                labels: labels,
+                                datasets: [
+                                    { 
+                                        label: 'Low', 
+                                        data: lows, 
+                                        borderColor: '#10b981',
+                                        backgroundColor: 'rgba(16, 185, 129, 0.1)',
+                                        fill: true,
+                                        tension: 0.4
+                                    },
+                                    { 
+                                        label: 'Medium', 
+                                        data: meds, 
+                                        borderColor: '#f59e0b',
+                                        backgroundColor: 'rgba(245, 158, 11, 0.1)',
+                                        fill: true,
+                                        tension: 0.4
+                                    },
+                                    { 
+                                        label: 'High', 
+                                        data: highs, 
+                                        borderColor: '#ef4444',
+                                        backgroundColor: 'rgba(239, 68, 68, 0.1)',
+                                        fill: true,
+                                        tension: 0.4
+                                    }
+                                ]
+                            },
+                            options: {
+                                responsive: true,
+                                maintainAspectRatio: false,
+                                interaction: { mode: 'index', intersect: false },
+                                plugins: {
+                                    legend: { 
+                                        position: 'bottom',
+                                        labels: {
+                                            padding: 20,
+                                            usePointStyle: true,
+                                            font: {
+                                                size: 12,
+                                                family: 'Inter'
+                                            }
+                                        }
+                                    },
+                                    tooltip: {
+                                            backgroundColor: getThemeColors().tooltipBg,
+                                            titleColor: getThemeColors().tooltipTitle,
+                                            bodyColor: getThemeColors().tooltipBody,
+                                            borderColor: getThemeColors().tooltipBorder,
+                                            borderWidth: 1,
+                                            cornerRadius: 8
+                                        }
+                                },
+                                scales: {
+                                    y: { 
+                                        beginAtZero: true,
+                                        grid: {
+                                            color: '#334155'
+                                        }
+                                    },
+                                    x: {
+                                        grid: {
+                                            color: '#334155'
+                                        }
+                                    }
+                                }
+                            }
+                        });
+                        window.trendChart = trendChart;
+                    }
+                });
+                
+                // Initialize real-time charts
+                initializeRealTimeCharts();
+            })
+            .catch(error => {
+                console.error('Error updating dashboard:', error);
+            });
+        }
+
+        // Initialize real-time monitoring charts
+        function initializeRealTimeCharts() {
+            // Live Traffic Chart
+            const trafficCtx = document.getElementById('liveTrafficChart').getContext('2d');
+            liveTrafficChart = new Chart(trafficCtx, {
+                type: 'line',
+                data: {
+                    labels: [],
+                    datasets: [{
+                        label: 'Packets/sec',
+                        data: [],
+                        borderColor: '#3b82f6',
+                        backgroundColor: 'rgba(59, 130, 246, 0.1)',
+                        fill: true,
+                        tension: 0.4,
+                        pointRadius: 3,
+                        pointHoverRadius: 6
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    animation: { duration: 300 },
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: {
+                            backgroundColor: getThemeColors().tooltipBg,
+                            titleColor: getThemeColors().tooltipTitle,
+                            bodyColor: getThemeColors().tooltipBody,
+                            borderColor: getThemeColors().tooltipBorder,
+                            borderWidth: 1,
+                            cornerRadius: 8
+                        }
+                    },
+                    scales: {
+                        y: { 
+                            beginAtZero: true,
+                            grid: { color: '#334155' },
+                            ticks: { color: '#94a3b8' }
+                        },
+                        x: {
+                            grid: { color: '#334155' },
+                            ticks: { color: '#94a3b8' }
+                        }
+                    }
+                }
+            });
+
+            // Live Alerts Chart
+            const alertsCtx = document.getElementById('liveAlertsChart').getContext('2d');
+            liveAlertsChart = new Chart(alertsCtx, {
+                type: 'bar',
+                data: {
+                    labels: ['Low', 'Medium', 'High', 'Critical'],
+                    datasets: [{
+                        label: 'Alert Count',
+                        data: [0, 0, 0, 0],
+                        backgroundColor: ['#10b981', '#f59e0b', '#ef4444', '#dc2626'],
+                        borderWidth: 0,
+                        borderRadius: 4
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    animation: { duration: 300 },
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: {
+                            backgroundColor: getThemeColors().tooltipBg,
+                            titleColor: getThemeColors().tooltipTitle,
+                            bodyColor: getThemeColors().tooltipBody,
+                            borderColor: getThemeColors().tooltipBorder,
+                            borderWidth: 1,
+                            cornerRadius: 8
+                        }
+                    },
+                    scales: {
+                        y: { 
+                            beginAtZero: true,
+                            grid: { color: '#334155' },
+                            ticks: { color: '#94a3b8' }
+                        },
+                        x: {
+                            grid: { display: false },
+                            ticks: { color: '#94a3b8' }
+                        }
+                    }
+                }
+            });
+
+            // Protocol Distribution Chart
+            const protocolCtx = document.getElementById('protocolChart').getContext('2d');
+            protocolChart = new Chart(protocolCtx, {
+                type: 'doughnut',
+                data: {
+                    labels: ['TCP', 'UDP', 'ICMP', 'HTTP', 'HTTPS', 'Other'],
+                    datasets: [{
+                        data: [0, 0, 0, 0, 0, 0],
+                        backgroundColor: [
+                            '#3b82f6', '#10b981', '#f59e0b', 
+                            '#ef4444', '#8b5cf6', '#6b7280'
+                        ],
+                        borderWidth: 0,
+                        hoverOffset: 4
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { 
+                            position: 'bottom',
+                            labels: {
+                                padding: 15,
+                                usePointStyle: true,
+                                font: { size: 11, family: 'Inter' }
+                            }
+                        },
+                        tooltip: {
+                            backgroundColor: getThemeColors().tooltipBg,
+                            titleColor: getThemeColors().tooltipTitle,
+                            bodyColor: getThemeColors().tooltipBody,
+                            borderColor: getThemeColors().tooltipBorder,
+                            borderWidth: 1,
+                            cornerRadius: 8
+                        }
+                    }
+                }
+            });
+        }
+
+        window.updateDashboardForLatestSession();
+
+
+
+        }); // Close DOMContentLoaded for Chart.js initialization
+
+        // Global socket variable and state management
+        let socket;
+        let appState = {
+            isLoading: false,
+            lastUpdate: 0,
+            updateQueue: [],
+            charts: {
+                pie: null,
+                trend: null
+            },
+            cache: new Map(),
+            debounceTimers: new Map(),
+            updateDashboard: function() {
+                window.updateDashboardForLatestSession();
+            }
+        };
+
+        // Debounce utility for performance optimization
+        function debounce(func, wait, key) {
+            if (appState.debounceTimers.has(key)) {
+                clearTimeout(appState.debounceTimers.get(key));
+            }
+            const timer = setTimeout(() => {
+                func();
+                appState.debounceTimers.delete(key);
+            }, wait);
+            appState.debounceTimers.set(key, timer);
+        }
+
+        // Optimized batch update function
+        function batchUpdate(updates) {
+            requestAnimationFrame(() => {
+                updates.forEach(update => update());
+            });
+        }
+
+        // Function to update dashboard with direct API response (optimized)
+        function updateDashboard(data) {
+            if (appState.isLoading) return;
+            
+            const now = Date.now();
+            if (now - appState.lastUpdate < 100) {
+                // Queue update if too frequent
+                appState.updateQueue.push(() => updateDashboard(data));
+                return;
+            }
+            appState.lastUpdate = now;
+
+            const updates = [];
+            
+            if (data.threat_distribution) {
+                // Batch DOM updates
+                updates.push(() => {
+                    const elements = {
+                        lowCount: data.threat_distribution.Low || 0,
+                        mediumCount: data.threat_distribution.Medium || 0,
+                        highCount: data.threat_distribution.High || 0,
+                        totalLogs: data.total_logs || 0
+                    };
+                    
+                    Object.entries(elements).forEach(([id, value]) => {
+                        const el = document.getElementById(id);
+                        if (el && el.textContent !== value.toString()) {
+                            el.style.transform = 'scale(1.1)';
+                            el.textContent = value;
+                            setTimeout(() => el.style.transform = 'scale(1)', 200);
+                        }
+                    });
+                });
+                
+                // Update pie chart with animation
+                if (window.pieChart && window.pieChart.data && window.pieChart.data.datasets) {
+                    updates.push(() => {
+                        const newData = [data.threat_distribution.Low || 0, data.threat_distribution.Medium || 0, data.threat_distribution.High || 0];
+                        window.pieChart.data.datasets[0].data = newData;
+                        window.pieChart.update('active');
+                    });
+                }
+            }
+            
+            batchUpdate(updates);
+            
+            // Debounced dashboard refresh
+            debounce(() => {
+                window.updateDashboardForLatestSession();
+            }, 1000, 'dashboard-refresh');
+        }
+
+        // Global functions that need to be accessible from onclick handlers
+        function analyzeText() {
+            const text = document.getElementById('logtext').value.trim();
+            if (!text) {
+                alert('Please enter some log text to analyze.');
+                return;
+            }
+            
+            // Show loading state
+            const analyzeBtn = document.querySelector('button[onclick="analyzeText()"]');
+            const originalText = analyzeBtn.innerHTML;
+            analyzeBtn.disabled = true;
+            analyzeBtn.innerHTML = '<span class="loading me-2"></span>Analyzing...';
+            
+            // Send text to API for analysis
+            fetch('/api/classify', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    logs: text
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.error) {
+                    // Log error but don't show modal
+                    console.log('Analysis failed:', data.error);
+                } else {
+                    // Normalize threat distribution and render via a single modal renderer
+                    let dist = data.threat_distribution;
+                    if (typeof dist === 'string') {
+                        try { dist = JSON.parse(dist); } catch { dist = { High: 0, Medium: 0, Low: 0 }; }
+                    }
+                    const normalized = {
+                        total_logs: data.total_logs || 0,
+                        threat_distribution: {
+                            High: (dist && typeof dist.High === 'number') ? dist.High : 0,
+                            Medium: (dist && typeof dist.Medium === 'number') ? dist.Medium : 0,
+                            Low: (dist && typeof dist.Low === 'number') ? dist.Low : 0,
+                        }
+                    };
+
+                    // Update dashboard with results
+                    setTimeout(() => {
+                        updateDashboard(normalized);
+                    }, 500);
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                // Log error but don't show modal
+                console.log('Analysis failed: Network error or server unavailable');
+            })
+            .finally(() => {
+                // Reset button state
+                analyzeBtn.disabled = false;
+                analyzeBtn.innerHTML = originalText;
+            });
+        }
+
+        function generateSample() {
+            document.getElementById('logtext').value = `[2023-05-23 10:45:32] Connection attempt from 192.168.1.5 to port 22
+[2023-05-23 10:46:15] Failed login for user admin from 192.168.1.10
+[2023-05-23 10:47:22] Successful login for user john from 192.168.1.15
+[2023-05-23 10:48:05] Port scan detected from 203.0.113.45`;
+        }
+
+
+
+        function setLoading(isLoading) {
+            const uploadBtn = document.querySelector('button[type="submit"]');
+            if (isLoading) {
+                uploadBtn.disabled = true;
+                uploadBtn.innerHTML = '<span class="loading me-2"></span>Analyzing...';
+            } else {
+                uploadBtn.disabled = false;
+                uploadBtn.innerHTML = '<i class="fas fa-upload me-2"></i>Upload & Analyze';
+            }
+        }
+
+        // DOM-dependent initialization
+        document.addEventListener('DOMContentLoaded', function() {
+            // Initialize Socket.IO with optimized settings
+            socket = io({
+                transports: ['websocket', 'polling'],
+                upgrade: true,
+                rememberUpgrade: true,
+                timeout: 30000,  // Reduced from 60000 for faster response
+                forceNew: false,
+                reconnection: true,
+                reconnectionDelay: 1000,  // Reduced from 2000
+                reconnectionDelayMax: 5000,  // Reduced from 10000
+                reconnectionAttempts: 5,  // Reduced from 10
+                maxReconnectionAttempts: 5,  // Reduced from 10
+                path: '/socket.io',
+                withCredentials: true,
+                pingTimeout: 30000,  // Reduced from 120000 to match server
+                pingInterval: 10000,  // Reduced from 60000 to match server
+                compression: true,  // Enable compression for better performance
+                autoConnect: true,
+                forceBase64: false  // Use binary transport for better performance
+            });
+            
+            // Progress bar elements with reactive updates
+            const progressBarContainer = document.getElementById('progressBarContainer');
+            const progressBar = document.getElementById('analyzeProgressBar');
+            let progressState = { current: 0, target: 0, animating: false };
+
+            function animateProgress(targetPercent) {
+                if (progressState.animating) return;
+                progressState.animating = true;
+                progressState.target = targetPercent;
+                
+                const animate = () => {
+                    const diff = progressState.target - progressState.current;
+                    if (Math.abs(diff) < 0.5) {
+                        progressState.current = progressState.target;
+                        progressState.animating = false;
+                        progressBar.style.width = progressState.current + '%';
+                        return;
+                    }
+                    
+                    progressState.current += diff * 0.1;
+                    progressBar.style.width = progressState.current + '%';
+                    requestAnimationFrame(animate);
+                };
+                animate();
+            }
+
+            function setProgress(percent) {
+                animateProgress(percent);
+            }
+
+            function showProgressBar() {
+                progressBarContainer.style.display = 'block';
+                progressBarContainer.style.opacity = '0';
+                progressBarContainer.style.transform = 'translateY(-10px)';
+                requestAnimationFrame(() => {
+                    progressBarContainer.style.transition = 'all 0.3s ease';
+                    progressBarContainer.style.opacity = '1';
+                    progressBarContainer.style.transform = 'translateY(0)';
+                });
+                setProgress(0);
+            }
+
+            function hideProgressBar() {
+                progressBarContainer.style.transition = 'all 0.3s ease';
+                progressBarContainer.style.opacity = '0';
+                progressBarContainer.style.transform = 'translateY(-10px)';
+                setTimeout(() => {
+                    progressBarContainer.style.display = 'none';
+                    setProgress(0);
+                }, 300);
+            }
+
+            // Real-time data streaming with adaptive throttling
+            let lastProgressUpdate = 0;
+            let lastDashboardUpdate = 0;
+            const PROGRESS_THROTTLE = 50; // 20fps base
+            const DASHBOARD_THROTTLE = 1000; // 1fps for dashboard updates
+            
+            // Adaptive throttling based on performance
+            const performanceMonitor = {
+                frameDrops: 0,
+                lastFrameTime: performance.now(),
+                adaptiveThrottle: PROGRESS_THROTTLE,
+                
+                checkPerformance() {
+                    const now = performance.now();
+                    const frameDuration = now - this.lastFrameTime;
+                    
+                    if (frameDuration > 32) { // Slower than 30fps
+                        this.frameDrops++;
+                        if (this.frameDrops > 5) {
+                            this.adaptiveThrottle = Math.min(this.adaptiveThrottle * 1.2, 200);
+                            this.frameDrops = 0;
+                        }
+                    } else {
+                        this.adaptiveThrottle = Math.max(this.adaptiveThrottle * 0.95, PROGRESS_THROTTLE);
+                    }
+                    
+                    this.lastFrameTime = now;
+                    return this.adaptiveThrottle;
+                }
+            };
+            
+            socket.on('analyze_progress', function(data) {
+                const now = Date.now();
+                const throttle = performanceMonitor.checkPerformance();
+                
+                if (now - lastProgressUpdate < throttle) return;
+                lastProgressUpdate = now;
+                
+                showProgressBar();
+                setProgress(data.percent);
+                if (data.percent >= 100) {
+                    setTimeout(hideProgressBar, 1000);
+                }
+            });
+            
+            // Dashboard updates with intelligent throttling
+            socket.on('analysis_complete', function(data) {
+                const now = Date.now();
+                if (now - lastDashboardUpdate < DASHBOARD_THROTTLE) {
+                    // Queue update for later
+                    setTimeout(() => {
+                        appState.updateDashboard();
+                    }, DASHBOARD_THROTTLE - (now - lastDashboardUpdate));
+                    return;
+                }
+                
+                lastDashboardUpdate = now;
+                appState.updateDashboard();
+            });
+
+            // Lazy loading for dashboard components
+            const lazyLoader = {
+                observers: new Map(),
+                loadedComponents: new Set(),
+                
+                observe(element, callback, options = {}) {
+                    if (!element || this.loadedComponents.has(element)) return;
+                    
+                    const observer = new IntersectionObserver((entries) => {
+                        entries.forEach(entry => {
+                            if (entry.isIntersecting) {
+                                callback(entry.target);
+                                this.loadedComponents.add(entry.target);
+                                observer.unobserve(entry.target);
+                            }
+                        });
+                    }, { threshold: options.threshold || 0.1, rootMargin: options.rootMargin || '50px' });
+                    
+                    observer.observe(element);
+                    this.observers.set(element, observer);
+                },
+                
+                cleanup() {
+                    this.observers.forEach(observer => observer.disconnect());
+                    this.observers.clear();
+                    this.loadedComponents.clear();
+                }
+            };
+            
+            // Initialize lazy loading for charts and components
+            function initializeLazyLoading() {
+                const pieChartContainer = document.getElementById('pieChart');
+                const trendChartContainer = document.getElementById('trendChart');
+                const alertsContainer = document.getElementById('liveAlertsList');
+                
+                if (pieChartContainer) {
+                    lazyLoader.observe(pieChartContainer, () => {
+                        console.log('📊 Loading pie chart...');
+                        if (window.pieChart) {
+                            window.updatePieChart();
+                        }
+                    });
+                }
+                
+                if (trendChartContainer) {
+                    lazyLoader.observe(trendChartContainer, () => {
+                        console.log('📈 Loading trend chart...');
+                        if (window.trendChart) {
+                            window.updateTrendChart();
+                        }
+                    });
+                }
+                
+                if (alertsContainer) {
+                    lazyLoader.observe(alertsContainer, () => {
+                        console.log('🚨 Loading alerts...');
+                        // Alerts are already handled by alertsRenderer
+                    });
+                }
+            }
+            
+            // Connection status management with visual feedback
+            socket.on('connect', () => {
+                console.log('🔌 Socket.IO connected');
+                document.body.classList.add('socket-connected');
+                document.body.classList.remove('socket-disconnected');
+                
+                // Show connection status
+                const statusIndicator = document.createElement('div');
+                statusIndicator.className = 'connection-status connected';
+                statusIndicator.innerHTML = '<i class="fas fa-wifi"></i> Connected';
+                document.body.appendChild(statusIndicator);
+                
+                setTimeout(() => statusIndicator.remove(), 3000);
+            });
+
+            socket.on('disconnect', () => {
+                console.log('🔌 Socket.IO disconnected');
+                document.body.classList.add('socket-disconnected');
+                document.body.classList.remove('socket-connected');
+                
+                // Show disconnection status
+                const statusIndicator = document.createElement('div');
+                statusIndicator.className = 'connection-status disconnected';
+                statusIndicator.innerHTML = '<i class="fas fa-wifi-slash"></i> Disconnected';
+                document.body.appendChild(statusIndicator);
+            });
+
+            socket.on('connect_error', (error) => {
+                console.warn('🔌 Socket.IO connection error:', error.message || error);
+                
+                // Only show error for non-timeout errors
+                if (!error.message || !error.message.includes('timeout')) {
+                    const statusIndicator = document.createElement('div');
+                    statusIndicator.className = 'connection-status error';
+                    statusIndicator.innerHTML = '<i class="fas fa-exclamation-triangle"></i> Connection Issue';
+                    document.body.appendChild(statusIndicator);
+                    
+                    setTimeout(() => statusIndicator.remove(), 3000);
+                }
+            });
+
+            socket.on('disconnect', (reason) => {
+                console.log('🔌 Socket.IO disconnected:', reason);
+                if (reason === 'io server disconnect') {
+                    // Server initiated disconnect, reconnect manually
+                    socket.connect();
+                }
+            });
+
+            socket.on('reconnect', (attemptNumber) => {
+                console.log('🔌 Socket.IO reconnected after', attemptNumber, 'attempts');
+            });
+
+            socket.on('connection_status', (data) => {
+                console.log('🔌 Connection status:', data.status);
+            });
+            
+            // Initialize lazy loading after DOM is ready
+            setTimeout(initializeLazyLoading, 100);
+
+            document.querySelector('form[method="post"]').addEventListener('submit', function(e) {
+            e.preventDefault();
+            setLoading(true);
+            showProgressBar();
+            
+            const formData = new FormData(this);
+            fetch('/api/upload', {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => response.json())
+            .then(data => {
+                setLoading(false);
+                setProgress(100);
+                setTimeout(hideProgressBar, 1000);
+                
+                if (data.success) {
+                    // Update dashboard with the same data for immediate feedback
+                    setTimeout(() => {
+                        updateDashboard(data);
+                    }, 500);
+                } else {
+                    // Log error but don't show modal
+                    console.log('Analysis failed:', data.error || 'An error occurred during analysis');
+                }
+            })
+            .catch(err => {
+                setLoading(false);
+                hideProgressBar();
+                
+                // Log error but don't show modal
+                console.log('Network error or server unavailable:', err);
+            });
+        });
+
+            // Add fade-in animation to elements
+            const elements = document.querySelectorAll('.fade-in');
+            elements.forEach((el, index) => {
+                el.style.animationDelay = `${index * 0.1}s`;
+            });
+
+            // Note: Live monitoring can be started manually from the monitor page
+
+            // Listen for analysis_complete event to refresh charts
+            socket.on('analysis_complete', function() {
+                window.updateDashboardForLatestSession();
+            });
+
+            // Real-time monitoring event handlers
+            socket.on('traffic_update', function(data) {
+                updateTrafficChart(data);
+                updateLiveStats(data);
+            });
+
+            socket.on('live_alert', function(alert) {
+                updateAlertsChart(alert);
+                updateRecentAlerts(alert);
+                updateLiveStats({ alert_count: 1 });
+            });
+
+            // Update functions for real-time data
+            function updateTrafficChart(data) {
+                if (!liveTrafficChart) return;
+                
+                const now = new Date().toLocaleTimeString();
+                const packetRate = data.packet_rate || Math.floor(Math.random() * 100);
+                
+                // Add new data point
+                trafficData.push({ time: now, packets: packetRate });
+                
+                // Keep only last MAX_DATA_POINTS
+                if (trafficData.length > MAX_DATA_POINTS) {
+                    trafficData.shift();
+                }
+                
+                // Update chart
+                liveTrafficChart.data.labels = trafficData.map(d => d.time);
+                liveTrafficChart.data.datasets[0].data = trafficData.map(d => d.packets);
+                liveTrafficChart.update('none');
+                
+                // Update protocol data if available
+                if (data.protocols) {
+                    Object.keys(data.protocols).forEach(protocol => {
+                        if (protocolData.hasOwnProperty(protocol)) {
+                            protocolData[protocol] += data.protocols[protocol];
+                        } else {
+                            protocolData.Other += data.protocols[protocol];
+                        }
+                    });
+                    updateProtocolChart();
+                }
+            }
+
+            function updateAlertsChart(alert) {
+                if (!liveAlertsChart) return;
+                
+                const severity = alert.severity || 'Low';
+                const severityIndex = ['Low', 'Medium', 'High', 'Critical'].indexOf(severity);
+                
+                if (severityIndex >= 0) {
+                    liveAlertsChart.data.datasets[0].data[severityIndex]++;
+                    liveAlertsChart.update('none');
+                }
+            }
+
+            function updateProtocolChart() {
+                if (!protocolChart) return;
+                
+                const values = Object.values(protocolData);
+                protocolChart.data.datasets[0].data = values;
+                protocolChart.update('none');
+            }
+
+            function updateRecentAlerts(alert) {
+                const alertElement = document.createElement('div');
+                alertElement.className = 'alert-item mb-2 p-2 rounded';
+                alertElement.style.cssText = `
+                    background: rgba(239, 68, 68, 0.1);
+                    border-left: 3px solid #ef4444;
+                    font-size: 0.875rem;
+                `;
+                
+                const timestamp = new Date().toLocaleTimeString();
+                alertElement.innerHTML = `
+                    <div class="d-flex justify-content-between align-items-start">
+                        <div>
+                            <strong>${alert.type || 'Security Alert'}</strong>
+                            <div class="text-muted small">${alert.description || 'Potential threat detected'}</div>
+                        </div>
+                        <small class="text-muted">${timestamp}</small>
+                    </div>
+                `;
+                
+                const alertsList = document.getElementById('recentAlertsList');
+                if (alertsList.children.length === 1 && alertsList.children[0].textContent.includes('Waiting')) {
+                    alertsList.innerHTML = '';
+                }
+                
+                alertsList.insertBefore(alertElement, alertsList.firstChild);
+                
+                // Keep only last MAX_ALERTS
+                while (alertsList.children.length > MAX_ALERTS) {
+                    alertsList.removeChild(alertsList.lastChild);
+                }
+            }
+
+            function updateLiveStats(data) {
+                if (data.packet_rate !== undefined) {
+                    document.getElementById('livePacketCount').textContent = data.packet_rate;
+                }
+                
+                if (data.alert_count !== undefined) {
+                    const current = parseInt(document.getElementById('liveAlertCount').textContent) || 0;
+                    document.getElementById('liveAlertCount').textContent = current + data.alert_count;
+                }
+                
+                if (data.connections !== undefined) {
+                    document.getElementById('liveConnectionCount').textContent = data.connections;
+                }
+                
+                if (data.threat_level !== undefined) {
+                    const threatElement = document.getElementById('liveThreatLevel');
+                    threatElement.textContent = data.threat_level;
+                    
+                    // Update color based on threat level
+                    const colors = {
+                        'LOW': 'var(--success-green)',
+                        'MEDIUM': 'var(--warning-yellow)', 
+                        'HIGH': 'var(--danger-red)',
+                        'CRITICAL': '#dc2626'
+                    };
+                    threatElement.style.color = colors[data.threat_level] || 'var(--warning-yellow)';
+                }
+            }
+
+            // Simulate some initial data for demonstration
+            setTimeout(() => {
+                if (liveTrafficChart && liveAlertsChart && protocolChart) {
+                    // Add some sample data points
+                    for (let i = 0; i < 5; i++) {
+                        updateTrafficChart({ 
+                            packet_rate: Math.floor(Math.random() * 50) + 10,
+                            protocols: { TCP: Math.floor(Math.random() * 20), UDP: Math.floor(Math.random() * 10) }
+                        });
+                    }
+                }
+            }, 2000);
+        }); // Close DOMContentLoaded for form handling and animations
+    </script>
+{% endblock %}
+
+{% block scripts %}
+    <script src="https://cdn.socket.io/4.7.4/socket.io.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+{% endblock %}

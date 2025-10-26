@@ -1,0 +1,2 @@
+id,username,email,password_hash,first_name,last_name,is_active,created_at,last_login,totp_secret
+1,admin,muhammadadammahfiz@gmail.com,pbkdf2:sha256:600000$4ZzYYZO4gsBaBflL$89823fdb4e5912b825f46cb8273699017ab5aa8494c8f5b95a296d0d9ba53c00,admin,admin,1,2025-10-24 09:31:07.342843,,

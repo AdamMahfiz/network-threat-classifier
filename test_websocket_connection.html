@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WebSocket Connection Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        .status {
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 4px;
+            font-weight: bold;
+        }
+        .connected { background-color: #d4edda; color: #155724; }
+        .disconnected { background-color: #f8d7da; color: #721c24; }
+        .connecting { background-color: #fff3cd; color: #856404; }
+        .log {
+            background-color: #f8f9fa;
+            border: 1px solid #dee2e6;
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 4px;
+            max-height: 300px;
+            overflow-y: auto;
+            font-family: monospace;
+            font-size: 12px;
+        }
+        button {
+            background-color: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            margin: 5px;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        button:hover { background-color: #0056b3; }
+        button:disabled { background-color: #6c757d; cursor: not-allowed; }
+        .stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 10px;
+            margin: 20px 0;
+        }
+        .stat-card {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 4px;
+            text-align: center;
+        }
+        .stat-value {
+            font-size: 24px;
+            font-weight: bold;
+            color: #007bff;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>WebSocket Connection Test</h1>
+        
+        <div id="connectionStatus" class="status disconnected">
+            Status: Disconnected
+        </div>
+        
+        <div class="stats">
+            <div class="stat-card">
+                <div class="stat-value" id="connectCount">0</div>
+                <div>Connections</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="disconnectCount">0</div>
+                <div>Disconnections</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="reconnectCount">0</div>
+                <div>Reconnections</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="messagesReceived">0</div>
+                <div>Messages Received</div>
+            </div>
+        </div>
+        
+        <div>
+            <button onclick="connect()">Connect</button>
+            <button onclick="disconnect()">Disconnect</button>
+            <button onclick="simulateNetworkIssue()">Simulate Network Issue</button>
+            <button onclick="clearLog()">Clear Log</button>
+        </div>
+        
+        <div id="log" class="log"></div>
+    </div>
+
+    <script src="https://cdn.socket.io/4.0.0/socket.io.min.js"></script>
+    <script>
+        let socket = null;
+        let connectCount = 0;
+        let disconnectCount = 0;
+        let reconnectCount = 0;
+        let messagesReceived = 0;
+        let isManualDisconnect = false;
+
+        function log(message) {
+            const logElement = document.getElementById('log');
+            const timestamp = new Date().toLocaleTimeString();
+            logElement.innerHTML += `[${timestamp}] ${message}<br>`;
+            logElement.scrollTop = logElement.scrollHeight;
+        }
+
+        function updateStatus(status, className) {
+            const statusElement = document.getElementById('connectionStatus');
+            statusElement.textContent = `Status: ${status}`;
+            statusElement.className = `status ${className}`;
+        }
+
+        function updateStats() {
+            document.getElementById('connectCount').textContent = connectCount;
+            document.getElementById('disconnectCount').textContent = disconnectCount;
+            document.getElementById('reconnectCount').textContent = reconnectCount;
+            document.getElementById('messagesReceived').textContent = messagesReceived;
+        }
+
+        function connect() {
+            if (socket && socket.connected) {
+                log('Already connected');
+                return;
+            }
+
+            isManualDisconnect = false;
+            log('Attempting to connect...');
+            updateStatus('Connecting...', 'connecting');
+
+            socket = io('http://localhost:5000', {
+                reconnection: true,
+                reconnectionDelay: 1000,
+                reconnectionDelayMax: 5000,
+                reconnectionAttempts: 10,
+                timeout: 20000,
+                pingTimeout: 60000,
+                pingInterval: 25000
+            });
+
+            socket.on('connect', () => {
+                connectCount++;
+                updateStats();
+                log('✅ Connected to server');
+                updateStatus('Connected', 'connected');
+            });
+
+            socket.on('disconnect', (reason) => {
+                disconnectCount++;
+                updateStats();
+                log(`❌ Disconnected: ${reason}`);
+                updateStatus('Disconnected', 'disconnected');
+            });
+
+            socket.on('connect_error', (error) => {
+                log(`🔴 Connection error: ${error.message}`);
+                updateStatus('Connection Error', 'disconnected');
+            });
+
+            socket.on('reconnect', (attemptNumber) => {
+                reconnectCount++;
+                updateStats();
+                log(`🔄 Reconnected after ${attemptNumber} attempts`);
+                updateStatus('Reconnected', 'connected');
+            });
+
+            socket.on('reconnect_attempt', (attemptNumber) => {
+                log(`🔄 Reconnection attempt ${attemptNumber}`);
+                updateStatus('Reconnecting...', 'connecting');
+            });
+
+            socket.on('reconnect_error', (error) => {
+                log(`🔴 Reconnection error: ${error.message}`);
+            });
+
+            socket.on('reconnect_failed', () => {
+                log('❌ Reconnection failed - max attempts reached');
+                updateStatus('Reconnection Failed', 'disconnected');
+            });
+
+            // Listen for monitoring events
+            socket.on('monitoring_status', (data) => {
+                messagesReceived++;
+                updateStats();
+                log(`📊 Monitoring status: ${JSON.stringify(data)}`);
+            });
+
+            socket.on('traffic_update', (data) => {
+                messagesReceived++;
+                updateStats();
+                log(`📈 Traffic update received: ${data.packets_processed || 'N/A'} packets`);
+            });
+
+            socket.on('live_alert', (data) => {
+                messagesReceived++;
+                updateStats();
+                log(`🚨 Live alert: ${data.threat_type || 'Unknown threat'}`);
+            });
+
+            socket.on('pong', () => {
+                log('🏓 Pong received');
+            });
+        }
+
+        function disconnect() {
+            if (!socket) {
+                log('No connection to disconnect');
+                return;
+            }
+
+            isManualDisconnect = true;
+            socket.disconnect();
+            log('🔌 Manual disconnect initiated');
+        }
+
+        function simulateNetworkIssue() {
+            if (!socket || !socket.connected) {
+                log('Not connected - cannot simulate network issue');
+                return;
+            }
+
+            log('🌐 Simulating network issue...');
+            // Force disconnect to simulate network issue
+            socket.io.engine.close();
+        }
+
+        function clearLog() {
+            document.getElementById('log').innerHTML = '';
+        }
+
+        // Auto-connect on page load
+        window.onload = () => {
+            log('Page loaded - ready for testing');
+            connect();
+        };
+    </script>
+</body>
+</html>

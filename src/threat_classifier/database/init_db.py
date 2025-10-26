@@ -13,16 +13,12 @@ logger = logging.getLogger(__name__)
 def init_database():
     """Initialize the database by creating all tables"""
     try:
-        # Get database URL from environment variable
-        database_url = os.getenv('DATABASE_URL')
-        if not database_url:
-            raise ValueError("DATABASE_URL environment variable is not set")
+        # Use the existing database connection instance
+        # This will automatically handle PostgreSQL/SQLite fallback
+        logger.info("Initializing database tables...")
         
-        # Create engine
-        engine = create_engine(database_url)
-        
-        # Create all tables
-        Base.metadata.create_all(engine)
+        # Create all tables using the configured engine
+        Base.metadata.create_all(db.engine)
         
         logger.info("Database tables created successfully")
         
@@ -35,4 +31,4 @@ if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
     
     # Initialize database
-    init_database() 
+    init_database()

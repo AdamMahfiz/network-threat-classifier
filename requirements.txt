@@ -1,4 +1,7 @@
 flask
+flask-socketio
+eventlet
+flask-mail
 scikit-learn
 pandas
 joblib
@@ -6,4 +9,7 @@ scapy
 psutil
 matplotlib
 reportlab
-flask-mail
+flask-login
+pyotp
+qrcode
+pillow

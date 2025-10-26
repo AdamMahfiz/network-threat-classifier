@@ -1,0 +1,66 @@
+@startuml Admin Workflow
+!theme plain
+
+title Admin Workflow - Network Threat Classification System
+
+start
+
+:Admin accesses system;
+:Login page;
+
+if (Valid credentials?) then (yes)
+  if (2FA enabled?) then (yes)
+    :Enter 2FA token;
+    if (Valid token?) then (no)
+      :Show error;
+      stop
+    endif
+  endif
+  
+  if (User has admin role?) then (yes)
+    :Admin Dashboard;
+    
+    while (Session active?) is (yes)
+      
+      :Choose feature;
+      
+      if (Feature type?) then (Admin Tasks)
+        :Manage users;
+        :View system logs;
+        :Generate reports;
+        
+      else (Regular Tasks)
+        :Profile management;
+        :Threat analysis;
+        :Real-time monitoring;
+      endif
+      
+      :View results;
+      
+      note right
+        Admin Features:
+        - User management
+        - System audit
+        - Advanced reporting
+        - All user capabilities
+      end note
+      
+    endwhile (timeout/logout)
+    
+    :Clear session;
+    :Redirect to login;
+    
+  else (no)
+    :Access Denied;
+    :Redirect to unauthorized page;
+    stop
+  endif
+  
+else (no)
+  :Show login error;
+  :Return to login page;
+endif
+
+stop
+
+@enduml

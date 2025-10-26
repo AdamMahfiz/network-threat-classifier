@@ -1,0 +1,1561 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
+    <title>Network Threat Monitor</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.socket.io/4.7.4/socket.io.min.js"></script>
+    <style>
+        :root {
+            /* Light theme colors */
+            --primary-color: #3b82f6;
+            --primary-dark: #1d4ed8;
+            --secondary-color: #64748b;
+            --accent-blue: #3b82f6;
+            --accent-green: #10b981;
+            --accent-orange: #f59e0b;
+            --accent-red: #ef4444;
+            --accent-purple: #8b5cf6;
+            --bg-primary: #ffffff;
+            --bg-secondary: #f8fafc;
+            --bg-white: #ffffff;
+            --text-primary: #1e293b;
+            --text-secondary: #64748b;
+            --text-muted: #94a3b8;
+            --border-color: #e2e8f0;
+            --card-bg: #ffffff;
+            --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+            --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+            --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+            --shadow-xl: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+            --primary-gradient: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            --success-gradient: linear-gradient(135deg, #10b981 0%, #059669 100%);
+            --warning-gradient: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+            --danger-gradient: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+        }
+
+        [data-theme="dark"] {
+            /* Dark theme colors */
+            --primary-color: #60a5fa;
+            --primary-dark: #3b82f6;
+            --secondary-color: #94a3b8;
+            --accent-blue: #60a5fa;
+            --accent-green: #34d399;
+            --accent-orange: #fbbf24;
+            --accent-red: #f87171;
+            --accent-purple: #a78bfa;
+            --bg-primary: #0f172a;
+            --bg-secondary: #1e293b;
+            --bg-white: #1e293b;
+            --text-primary: #f1f5f9;
+            --text-secondary: #cbd5e1;
+            --text-muted: #64748b;
+            --border-color: #334155;
+            --card-bg: #1e293b;
+            --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.3);
+            --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.4), 0 2px 4px -1px rgba(0, 0, 0, 0.3);
+            --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.4), 0 4px 6px -2px rgba(0, 0, 0, 0.3);
+            --shadow-xl: 0 20px 25px -5px rgba(0, 0, 0, 0.4), 0 10px 10px -5px rgba(0, 0, 0, 0.2);
+            --primary-gradient: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            --success-gradient: linear-gradient(135deg, #34d399 0%, #10b981 100%);
+            --warning-gradient: linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%);
+            --danger-gradient: linear-gradient(135deg, #f87171 0%, #ef4444 100%);
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            line-height: 1.6;
+            transition: all 0.3s ease;
+        }
+
+        /* Animations */
+        @keyframes pulse {
+            0% {
+                transform: scale(1);
+                opacity: 1;
+            }
+            50% {
+                transform: scale(1.1);
+                opacity: 0.7;
+            }
+            100% {
+                transform: scale(1);
+                opacity: 1;
+            }
+        }
+
+        @keyframes slideInUp {
+            from {
+                transform: translateY(20px);
+                opacity: 0;
+            }
+            to {
+                transform: translateY(0);
+                opacity: 1;
+            }
+        }
+
+        @keyframes fadeInScale {
+            from {
+                transform: scale(0.95);
+                opacity: 0;
+            }
+            to {
+                transform: scale(1);
+                opacity: 1;
+            }
+        }
+
+        @keyframes glow {
+            0%, 100% {
+                box-shadow: 0 0 5px rgba(46, 204, 113, 0.5);
+            }
+            50% {
+                box-shadow: 0 0 20px rgba(46, 204, 113, 0.8);
+            }
+        }
+
+        /* Enhanced stat cards */
+        .stat-card {
+            transition: all 0.3s ease;
+            animation: fadeInScale 0.6s ease-out;
+        }
+
+        .stat-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 8px 25px rgba(0,0,0,0.15);
+        }
+
+        /* Terminal enhancements */
+        .log-entry {
+            animation: slideInUp 0.3s ease-out;
+            transition: all 0.2s ease;
+        }
+
+        .log-entry:hover {
+            background: rgba(255,255,255,0.05);
+            border-radius: 4px;
+            padding-left: 16px !important;
+        }
+
+        /* Scrollbar styling */
+        .log-container::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        .log-container::-webkit-scrollbar-track {
+            background: rgba(0,0,0,0.1);
+            border-radius: 4px;
+        }
+
+        .log-container::-webkit-scrollbar-thumb {
+            background: rgba(255,255,255,0.2);
+            border-radius: 4px;
+        }
+
+        .log-container::-webkit-scrollbar-thumb:hover {
+            background: rgba(255,255,255,0.3);
+        }
+
+        /* Navbar styling */
+        .navbar {
+            background: var(--card-bg);
+            backdrop-filter: blur(20px);
+            border-bottom: 1px solid var(--border-color);
+            box-shadow: var(--shadow-md);
+            padding: 1rem 0;
+            position: sticky;
+            top: 0;
+            z-index: 1030;
+        }
+
+        .navbar-brand {
+            font-weight: 700;
+            font-size: 1.5rem;
+            background: var(--primary-gradient);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            text-decoration: none !important;
+            transition: all 0.3s ease;
+        }
+        
+        .navbar-brand:hover {
+            transform: scale(1.05);
+        }
+        
+        .navbar-nav .nav-link {
+            font-weight: 500;
+            color: var(--text-secondary) !important;
+            padding: 0.75rem 1.25rem;
+            border-radius: 0.5rem;
+            transition: all 0.3s ease;
+            margin: 0 0.25rem;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .navbar-nav .nav-link::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: var(--primary-gradient);
+            transition: left 0.3s ease;
+            z-index: -1;
+            opacity: 0.1;
+        }
+        
+        .navbar-nav .nav-link:hover::before {
+            left: 0;
+        }
+        
+        .navbar-nav .nav-link:hover {
+            color: var(--primary-color) !important;
+            transform: translateY(-2px);
+            box-shadow: var(--shadow-md);
+        }
+        
+        .navbar-nav .nav-link.active {
+            color: var(--bg-white) !important;
+            background: var(--primary-gradient);
+            font-weight: 600;
+            box-shadow: var(--shadow-md);
+            transform: translateY(-1px);
+        }
+        
+        .navbar-nav .nav-link.active::before {
+            display: none;
+        }
+        
+        .main-container {
+            padding: 20px;
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+        
+        .status-card {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 15px;
+            padding: 25px;
+            margin-bottom: 20px;
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            transition: all 0.3s ease;
+        }
+        
+        .status-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+        }
+        
+        .metric-card {
+            text-align: center;
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 12px;
+            padding: 20px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        
+        .metric-number {
+            font-size: 2.5rem;
+            font-weight: bold;
+            margin: 10px 0;
+        }
+        
+        .metric-label {
+            font-size: 0.9rem;
+            opacity: 0.8;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+        
+        .alert-item {
+            background: rgba(220, 53, 69, 0.2);
+            border: 1px solid #dc3545;
+            border-radius: 10px;
+            padding: 20px;
+            margin-bottom: 15px;
+            animation: slideIn 0.5s ease-out;
+            transition: all 0.3s ease;
+        }
+        
+        .alert-item:hover {
+            transform: translateX(5px);
+            box-shadow: 0 5px 15px rgba(220, 53, 69, 0.3);
+        }
+        
+        .alert-item.high {
+            border-color: #dc3545;
+            background: rgba(220, 53, 69, 0.3);
+        }
+        
+        .alert-item.medium {
+            border-color: #ffc107;
+            background: rgba(255, 193, 7, 0.3);
+        }
+        
+        .alert-item.low {
+            border-color: #17a2b8;
+            background: rgba(23, 162, 184, 0.3);
+        }
+        
+        @keyframes slideIn {
+            from { opacity: 0; transform: translateY(-20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        
+        .monitoring-controls {
+            background: rgba(0, 0, 0, 0.2);
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+        
+        .status-indicator {
+            display: inline-block;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            margin-right: 8px;
+            animation: pulse 2s infinite;
+        }
+        
+        .status-indicator.active {
+            background-color: #28a745;
+        }
+        
+        .status-indicator.inactive {
+            background-color: #dc3545;
+        }
+        
+        @keyframes pulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.5; }
+            100% { opacity: 1; }
+        }
+        
+        .chart-container {
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 12px;
+            padding: 20px;
+            height: 400px;
+        }
+        
+        .log-container {
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 12px;
+            padding: 20px;
+            height: 300px;
+            overflow-y: auto;
+            font-family: 'Courier New', monospace;
+            font-size: 0.9rem;
+        }
+        
+        .log-entry {
+            padding: 5px 0;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        
+        .log-entry.success { color: #28a745; }
+        .log-entry.danger { color: #dc3545; }
+        .log-entry.warning { color: #ffc107; }
+        .log-entry.info { color: #17a2b8; }
+        
+        .btn-custom {
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            color: white;
+            transition: all 0.3s ease;
+        }
+        
+        .btn-custom:hover {
+            background: rgba(255, 255, 255, 0.2);
+            color: white;
+            transform: translateY(-2px);
+        }
+
+        /* Enhanced Monitoring Button Styles */
+        .btn-monitor {
+            background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
+            border: 2px solid #28a745;
+            color: white;
+            font-weight: 600;
+            padding: 12px 24px;
+            border-radius: 8px;
+            box-shadow: 0 4px 15px rgba(40, 167, 69, 0.3);
+            transition: all 0.3s ease;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .btn-monitor:hover {
+            background: linear-gradient(135deg, #218838 0%, #1ea085 100%);
+            border-color: #1e7e34;
+            color: white;
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(40, 167, 69, 0.4);
+        }
+
+        .btn-monitor:active {
+            transform: translateY(0);
+            box-shadow: 0 2px 10px rgba(40, 167, 69, 0.3);
+        }
+
+        .btn-monitor.disabled,
+        .btn-monitor:disabled {
+            background: #6c757d;
+            border-color: #6c757d;
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+            box-shadow: none;
+        }
+
+        .btn-stop {
+            background: linear-gradient(135deg, #dc3545 0%, #e74c3c 100%);
+            border: 2px solid #dc3545;
+            color: white;
+            font-weight: 600;
+            padding: 12px 24px;
+            border-radius: 8px;
+            box-shadow: 0 4px 15px rgba(220, 53, 69, 0.3);
+            transition: all 0.3s ease;
+
+        /* Data Stream Capture Section Styles */
+        .data-stream-section {
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 20px;
+            border: 1px solid rgba(220, 53, 69, 0.3);
+        }
+
+        .stream-indicator {
+            display: inline-block;
+            width: 16px;
+            height: 16px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, #dc3545 0%, #e74c3c 100%);
+            margin-right: 10px;
+            animation: streamPulse 1.5s infinite;
+            box-shadow: 0 0 10px rgba(220, 53, 69, 0.5);
+        }
+
+        @keyframes streamPulse {
+            0% { 
+                opacity: 1; 
+                transform: scale(1);
+                box-shadow: 0 0 10px rgba(220, 53, 69, 0.5);
+            }
+            50% { 
+                opacity: 0.7; 
+                transform: scale(1.1);
+                box-shadow: 0 0 20px rgba(220, 53, 69, 0.8);
+            }
+            100% { 
+                opacity: 1; 
+                transform: scale(1);
+                box-shadow: 0 0 10px rgba(220, 53, 69, 0.5);
+            }
+        }
+
+        .stream-data {
+            background: rgba(0, 0, 0, 0.4);
+            border-radius: 8px;
+            padding: 15px;
+            font-family: 'Courier New', monospace;
+            font-size: 0.85rem;
+            color: #f8f9fa;
+            max-height: 200px;
+            overflow-y: auto;
+            border: 1px solid rgba(220, 53, 69, 0.2);
+        }
+
+        .stream-entry {
+            padding: 3px 0;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+            color: #28a745;
+        }
+
+        .stream-entry:last-child {
+            border-bottom: none;
+        }
+
+        .stream-stats {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+            padding: 10px;
+            background: rgba(220, 53, 69, 0.1);
+            border-radius: 6px;
+            border: 1px solid rgba(220, 53, 69, 0.2);
+        }
+
+        .stream-stat-item {
+            text-align: center;
+        }
+
+        .stream-stat-value {
+            font-size: 1.2rem;
+            font-weight: bold;
+            color: #dc3545;
+        }
+
+        .stream-stat-label {
+            font-size: 0.8rem;
+            color: #adb5bd;
+            text-transform: uppercase;
+        }
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .btn-stop:hover {
+            background: linear-gradient(135deg, #c82333 0%, #c0392b 100%);
+            border-color: #bd2130;
+            color: white;
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(220, 53, 69, 0.4);
+        }
+
+        .btn-stop:active {
+            transform: translateY(0);
+            box-shadow: 0 2px 10px rgba(220, 53, 69, 0.3);
+        }
+
+        .btn-stop.disabled,
+        .btn-stop:disabled {
+            background: #6c757d;
+            border-color: #6c757d;
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+            box-shadow: none;
+        }
+
+        /* Button pulse animation for active state */
+        .btn-monitor.active {
+            animation: pulse-green 2s infinite;
+        }
+
+        .btn-stop.active {
+            animation: pulse-red 2s infinite;
+        }
+
+        @keyframes pulse-green {
+            0% { box-shadow: 0 4px 15px rgba(40, 167, 69, 0.3); }
+            50% { box-shadow: 0 4px 25px rgba(40, 167, 69, 0.6); }
+            100% { box-shadow: 0 4px 15px rgba(40, 167, 69, 0.3); }
+        }
+
+        @keyframes pulse-red {
+            0% { box-shadow: 0 4px 15px rgba(220, 53, 69, 0.3); }
+            50% { box-shadow: 0 4px 25px rgba(220, 53, 69, 0.6); }
+            100% { box-shadow: 0 4px 15px rgba(220, 53, 69, 0.3); }
+        }
+
+        /* Monitoring controls container */
+        .monitoring-controls-container {
+            background: var(--card-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 20px;
+            box-shadow: var(--shadow-md);
+        }
+
+        .monitoring-status-section {
+            display: flex;
+            align-items: center;
+            gap: 20px;
+            flex-wrap: wrap;
+        }
+
+        .status-group {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 16px;
+            background: var(--bg-secondary);
+            border-radius: 20px;
+            border: 1px solid var(--border-color);
+        }
+
+        .button-group {
+            display: flex;
+            gap: 12px;
+            margin-left: auto;
+        }
+    </style>
+</head>
+<body>
+    <!-- Navigation -->
+    <nav class="navbar navbar-expand-lg navbar-light">
+        <div class="container-fluid">
+            <a class="navbar-brand" href="/">
+                <i class="fas fa-shield-alt me-2"></i>
+                Network Threat Classifier
+            </a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav ms-auto">
+                    {% if current_user.is_authenticated %}
+                    <li class="nav-item">
+                        <a class="nav-link {% if request.path == '/' %}active{% endif %}" href="/">
+                            <i class="fas fa-tachometer-alt me-1"></i>Dashboard
+                        </a>
+                    </li>
+                    {% if current_user.has_role('admin') %}
+                    <li class="nav-item">
+                        <a class="nav-link {% if request.path == '/db_health' %}active{% endif %}" href="/db_health">
+                            <i class="fas fa-database me-1"></i>DB Health
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link {% if request.path == '/audit' %}active{% endif %}" href="/audit">
+                            <i class="fas fa-history me-1"></i>Audit Log
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link {% if request.path == '/auth/admin/users' %}active{% endif %}" href="{{ url_for('auth.admin_users') }}">
+                            <i class="fas fa-users-cog me-1"></i>Admin
+                        </a>
+                    </li>
+                    {% endif %}
+                    <li class="nav-item">
+                        <a class="nav-link {% if request.path == '/monitor' %}active{% endif %}" href="/monitor">
+                            <i class="fas fa-chart-line me-1"></i>Live Monitor
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link {% if request.path == '/auth/profile' %}active{% endif %}" href="{{ url_for('auth.profile') }}">
+                            <i class="fas fa-user me-1"></i>Profile
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <button class="nav-link btn btn-link" id="darkModeToggle" onclick="toggleDarkMode()" title="Toggle Dark Mode">
+                            <i class="fas fa-moon" id="darkModeIcon"></i>
+                        </button>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="{{ url_for('auth.logout') }}">
+                            <i class="fas fa-sign-out-alt me-1"></i>Logout
+                        </a>
+                    </li>
+                    {% else %}
+                    <li class="nav-item">
+                        <button class="nav-link btn btn-link" id="darkModeToggle" onclick="toggleDarkMode()" title="Toggle Dark Mode">
+                            <i class="fas fa-moon" id="darkModeIcon"></i>
+                        </button>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link {% if request.path == '/auth/login' %}active{% endif %}" href="{{ url_for('auth.login') }}">
+                            <i class="fas fa-sign-in-alt me-1"></i>Login
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link {% if request.path == '/auth/register' %}active{% endif %}" href="{{ url_for('auth.register') }}">
+                            <i class="fas fa-user-plus me-1"></i>Register
+                        </a>
+                    </li>
+                    {% endif %}
+                </ul>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container mt-4">
+        <!-- Control Panel -->
+        <div class="monitoring-controls-container">
+            <div class="row align-items-center">
+                <div class="col-md-6">
+                    <h4><i class="fas fa-cogs me-2"></i>Monitoring Control</h4>
+                    <p class="mb-0 text-muted">Real-time network threat monitoring system</p>
+                </div>
+                <div class="col-md-6">
+                    <div class="monitoring-status-section">
+                        <div class="status-group">
+                            <span class="status-indicator" id="statusIndicator"></span>
+                            <span id="monitoringStatus">Inactive</span>
+                        </div>
+                        <div class="status-group">
+                            <span class="status-indicator" id="connectionStatus"></span>
+                            <span id="connectionText">Connecting...</span>
+                        </div>
+                        <div class="button-group">
+                            <button id="startBtn" class="btn btn-monitor" onclick="startMonitoring()">
+                                <i class="fas fa-play me-1"></i>Start Monitoring
+                            </button>
+                            <button id="stopBtn" class="btn btn-stop" onclick="stopMonitoring()">
+                                <i class="fas fa-stop me-1"></i>Stop Monitoring
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Metrics Dashboard -->
+        <div class="row mb-4">
+            <div class="col-md-3">
+                <div class="metric-card">
+                    <i class="fas fa-exclamation-triangle text-danger" style="font-size: 2rem;"></i>
+                    <div id="alertCount" class="metric-number text-danger">0</div>
+                    <div class="metric-label">Threats Detected</div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="metric-card">
+                    <i class="fas fa-network-wired text-info" style="font-size: 2rem;"></i>
+                    <div id="trafficCount" class="metric-number text-info">0</div>
+                    <div class="metric-label">Traffic Updates</div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="metric-card">
+                    <i class="fas fa-heartbeat text-success" style="font-size: 2rem;"></i>
+                    <div id="heartbeatCount" class="metric-number text-success">0</div>
+                    <div class="metric-label">System Heartbeats</div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="metric-card">
+                    <i class="fas fa-clock text-warning" style="font-size: 2rem;"></i>
+                    <div id="uptime" class="metric-number text-warning">00:00:00</div>
+                    <div class="metric-label">Session Uptime</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Main Content -->
+        <div class="row">
+            <!-- Live Alerts -->
+            <div class="col-lg-6 mb-4">
+                <div class="status-card">
+                    <h4 class="mb-3">
+                        <i class="fas fa-bell text-danger me-2"></i>
+                        Live Security Alerts
+                        <span id="alertBadge" class="badge bg-danger ms-2">0</span>
+                    </h4>
+                    <div id="alertsList" style="max-height: 400px; overflow-y: auto;">
+                        <div class="text-center text-muted py-4">
+                            <i class="fas fa-shield-alt fa-3x mb-3 opacity-50"></i>
+                            <p>Monitoring for threats...</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Network Traffic Chart -->
+            <div class="col-lg-6 mb-4">
+                <div class="status-card">
+                    <h4 class="mb-3">
+                        <i class="fas fa-chart-line text-info me-2"></i>
+                        Network Traffic Monitor
+                        <span class="badge bg-success ms-2" id="trafficStatus">Capturing</span>
+                    </h4>
+                    <div class="chart-container">
+                        <canvas id="trafficChart"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Data Stream Capture Section -->
+        <div class="row mb-4">
+            <div class="col-12">
+                <div class="status-card" style="background: linear-gradient(135deg, #2c3e50 0%, #34495e 100%); border: none; box-shadow: 0 8px 32px rgba(0,0,0,0.3); border-radius: 16px; overflow: hidden;">
+                    <!-- Header Section -->
+                    <div class="d-flex justify-content-between align-items-center mb-4" style="background: rgba(0,0,0,0.2); margin: -20px -20px 20px -20px; padding: 20px; border-bottom: 2px solid #3498db;">
+                        <div class="d-flex align-items-center">
+                            <div class="stream-indicator" style="width: 12px; height: 12px; background: #2ecc71; border-radius: 50%; margin-right: 12px; animation: pulse 2s infinite; box-shadow: 0 0 10px #2ecc71;"></div>
+                            <h4 class="mb-0" style="color: #ecf0f1; font-weight: 600; font-size: 1.4rem; text-shadow: 0 2px 4px rgba(0,0,0,0.3);">
+                                <i class="fas fa-stream" style="margin-right: 8px; color: #3498db;"></i>
+                                Data Stream Capture
+                            </h4>
+                        </div>
+                        <div class="d-flex align-items-center">
+                            <span class="badge" style="background: linear-gradient(45deg, #2ecc71, #27ae60); color: white; padding: 6px 12px; border-radius: 20px; font-size: 0.85rem; margin-right: 10px;">
+                                <i class="fas fa-check-circle" style="margin-right: 4px;"></i>
+                                ACTIVE
+                            </span>
+                        </div>
+                    </div>
+                    
+                    <!-- Stats Section -->
+                    <div class="row mb-4">
+                        <div class="col-md-4">
+                            <div class="stat-card" style="background: linear-gradient(135deg, #3498db, #2980b9); padding: 20px; border-radius: 12px; text-align: center; box-shadow: 0 4px 15px rgba(52, 152, 219, 0.3);">
+                                <div class="stat-icon" style="font-size: 2rem; color: white; margin-bottom: 8px;">
+                                    <i class="fas fa-tachometer-alt"></i>
+                                </div>
+                                <div class="stream-stat-value" id="captureRate" style="font-size: 2rem; font-weight: bold; color: white; margin-bottom: 4px;">0</div>
+                                <div class="stream-stat-label" style="color: rgba(255,255,255,0.8); font-size: 0.9rem; text-transform: uppercase; letter-spacing: 1px;">Packets/sec</div>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="stat-card" style="background: linear-gradient(135deg, #9b59b6, #8e44ad); padding: 20px; border-radius: 12px; text-align: center; box-shadow: 0 4px 15px rgba(155, 89, 182, 0.3);">
+                                <div class="stat-icon" style="font-size: 2rem; color: white; margin-bottom: 8px;">
+                                    <i class="fas fa-database"></i>
+                                </div>
+                                <div class="stream-stat-value" id="totalCaptured" style="font-size: 2rem; font-weight: bold; color: white; margin-bottom: 4px;">0</div>
+                                <div class="stream-stat-label" style="color: rgba(255,255,255,0.8); font-size: 0.9rem; text-transform: uppercase; letter-spacing: 1px;">Total Packets</div>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="stat-card" style="background: linear-gradient(135deg, #2ecc71, #27ae60); padding: 20px; border-radius: 12px; text-align: center; box-shadow: 0 4px 15px rgba(46, 204, 113, 0.3);">
+                                <div class="stat-icon" style="font-size: 2rem; color: white; margin-bottom: 8px;">
+                                    <i class="fas fa-shield-alt"></i>
+                                </div>
+                                <div class="stream-stat-value" id="threatLevel" style="font-size: 1.5rem; font-weight: bold; color: white; margin-bottom: 4px;">Normal</div>
+                                <div class="stream-stat-label" style="color: rgba(255,255,255,0.8); font-size: 0.9rem; text-transform: uppercase; letter-spacing: 1px;">Threat Level</div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Terminal Section -->
+                    <div class="terminal-section">
+                        <div class="terminal-header" style="background: #1a1a1a; padding: 12px 20px; border-radius: 8px 8px 0 0; border-bottom: 2px solid #333; display: flex; align-items: center; justify-content: space-between;">
+                            <div class="d-flex align-items-center">
+                                <div class="terminal-buttons" style="display: flex; gap: 8px; margin-right: 15px;">
+                                    <div style="width: 12px; height: 12px; background: #ff5f56; border-radius: 50%;"></div>
+                                    <div style="width: 12px; height: 12px; background: #ffbd2e; border-radius: 50%;"></div>
+                                    <div style="width: 12px; height: 12px; background: #27ca3f; border-radius: 50%;"></div>
+                                </div>
+                                <span style="color: #888; font-family: 'Consolas', monospace; font-size: 0.9rem;">
+                                    <i class="fas fa-terminal" style="margin-right: 8px;"></i>
+                                    Real-time Network Monitor
+                                </span>
+                            </div>
+                            <div class="terminal-controls">
+                                <button class="btn btn-sm" onclick="clearStreamLogs()" style="background: rgba(255,255,255,0.1); border: 1px solid #444; color: #ccc; padding: 4px 12px; border-radius: 4px; font-size: 0.8rem;">
+                                    <i class="fas fa-trash" style="margin-right: 4px;"></i>
+                                    Clear
+                                </button>
+                            </div>
+                        </div>
+                        <div id="streamData" class="log-container" style="background: linear-gradient(135deg, #0d1117 0%, #161b22 100%); color: #c9d1d9; font-family: 'Consolas', 'Monaco', 'Courier New', monospace; font-size: 13px; padding: 20px; height: 350px; overflow-y: auto; border-radius: 0 0 8px 8px; border: 1px solid #30363d; position: relative;">
+                            <div class="log-entry" style="color: #7d8590; margin-bottom: 4px; padding: 4px 0; border-left: 3px solid #21262d; padding-left: 12px;">
+                                <i class="fas fa-info-circle" style="margin-right: 8px; color: #58a6ff;"></i>
+                                [System] Initializing packet capture monitoring...
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- System Logs -->
+        <div class="row">
+            <div class="col-12">
+                <div class="status-card">
+                    <div class="d-flex justify-content-between align-items-center mb-3">
+                        <h4 class="mb-0">
+                            <i class="fas fa-terminal text-success me-2"></i>
+                            Real-time System Logs
+                        </h4>
+                        <button class="btn btn-outline-light btn-sm" onclick="clearLogs()">
+                            <i class="fas fa-trash me-2"></i>Clear Logs
+                        </button>
+                    </div>
+                    <div id="systemLogs" class="log-container">
+                        <div class="log-entry info">[System] Initializing monitoring dashboard...</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Global variables
+        let socket = null;
+        let alertCount = 0;
+        let trafficCount = 0;
+        let heartbeatCount = 0;
+        let isMonitoring = false;
+        let startTime = Date.now();
+        let trafficChart = null;
+        let trafficData = [];
+        
+        // Persistent monitoring session management
+        const MONITORING_SESSION_KEY = 'networkMonitoringSession';
+        
+        function saveMonitoringSession() {
+            const sessionData = {
+                isActive: isMonitoring,
+                startTime: startTime,
+                alertCount: alertCount,
+                trafficCount: trafficCount,
+                heartbeatCount: heartbeatCount,
+                lastUpdated: Date.now()
+            };
+            localStorage.setItem(MONITORING_SESSION_KEY, JSON.stringify(sessionData));
+        }
+        
+        function loadMonitoringSession() {
+            const sessionData = localStorage.getItem(MONITORING_SESSION_KEY);
+            if (sessionData) {
+                try {
+                    const data = JSON.parse(sessionData);
+                    // Only restore if session is less than 1 hour old
+                    const sessionAge = Date.now() - data.lastUpdated;
+                    if (sessionAge < 3600000) { // 1 hour in milliseconds
+                        startTime = data.startTime;
+                        alertCount = data.alertCount || 0;
+                        trafficCount = data.trafficCount || 0;
+                        heartbeatCount = data.heartbeatCount || 0;
+                        isMonitoring = data.isActive || false;
+                        
+                        // Update UI counters
+                        document.getElementById('alertCount').textContent = alertCount;
+                        document.getElementById('trafficCount').textContent = trafficCount;
+                        document.getElementById('heartbeatCount').textContent = heartbeatCount;
+                        document.getElementById('alertBadge').textContent = alertCount;
+                        
+                        return data.isActive;
+                    }
+                } catch (e) {
+                    console.warn('Failed to parse monitoring session data:', e);
+                }
+            }
+            return false;
+        }
+        
+        function clearMonitoringSession() {
+            localStorage.removeItem(MONITORING_SESSION_KEY);
+        }
+
+        // Dark mode functionality
+        function toggleDarkMode() {
+            const html = document.documentElement;
+            const currentTheme = html.getAttribute('data-theme');
+            const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
+            
+            html.setAttribute('data-theme', newTheme);
+            localStorage.setItem('theme', newTheme);
+            
+            // Update icon
+            const icon = document.getElementById('darkModeIcon');
+            if (newTheme === 'dark') {
+                icon.className = 'fas fa-sun';
+            } else {
+                icon.className = 'fas fa-moon';
+            }
+            
+            // Update chart colors
+            updateChartColors();
+        }
+        
+        // Initialize theme on page load
+        function initializeTheme() {
+            const savedTheme = localStorage.getItem('theme') || 'light';
+            const html = document.documentElement;
+            const icon = document.getElementById('darkModeIcon');
+            
+            html.setAttribute('data-theme', savedTheme);
+            
+            if (savedTheme === 'dark') {
+                icon.className = 'fas fa-sun';
+            } else {
+                icon.className = 'fas fa-moon';
+            }
+        }
+
+        // Update chart colors based on theme
+        function updateChartColors() {
+            if (trafficChart) {
+                const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+                const textColor = isDark ? '#f1f5f9' : '#1e293b';
+                const gridColor = isDark ? 'rgba(241, 245, 249, 0.1)' : 'rgba(30, 41, 59, 0.1)';
+                
+                trafficChart.options.plugins.legend.labels.color = textColor;
+                trafficChart.options.scales.x.ticks.color = textColor;
+                trafficChart.options.scales.x.grid.color = gridColor;
+                trafficChart.options.scales.y.ticks.color = textColor;
+                trafficChart.options.scales.y.grid.color = gridColor;
+                trafficChart.update();
+            }
+        }
+
+        // Initialize everything when page loads
+        document.addEventListener('DOMContentLoaded', function() {
+            initializeTheme(); // Initialize theme first
+            logMessage('🔧 Initializing Network Threat Monitor...', 'info');
+            
+            // Load existing monitoring session if available
+            const hasActiveSession = loadMonitoringSession();
+            
+            initializeSocket();
+            initializeChart();
+            startUptimeCounter();
+            
+            // Only auto-start monitoring if no active session exists
+            if (!hasActiveSession) {
+                setTimeout(() => {
+                    logMessage('🤖 Auto-starting monitoring system...', 'info');
+                    startMonitoring();
+                }, 2000);
+            } else {
+                logMessage('🔄 Restored previous monitoring session', 'info');
+                // Update monitoring status display
+                updateMonitoringStatus(isMonitoring);
+            }
+        });
+
+        // Initialize Socket.IO connection
+        function initializeSocket() {
+            socket = io('/', {
+                transports: ['websocket', 'polling'],
+                upgrade: true,
+                timeout: 60000,
+                pingTimeout: 60000,
+                pingInterval: 25000,
+                reconnection: true,
+                reconnectionDelay: 2000,
+                reconnectionDelayMax: 10000,
+                reconnectionAttempts: 10,
+                maxReconnectionAttempts: 10,
+                forceNew: true,
+                autoConnect: true
+            });
+
+            // Connection events
+            socket.on('connect', function() {
+                console.log('🔍 DEBUG: WebSocket connected successfully');
+                console.log('🔍 DEBUG: Socket ID:', socket.id);
+                console.log('🔍 DEBUG: Socket transport:', socket.io.engine.transport.name);
+                logMessage('✅ Connected to monitoring server', 'success');
+                updateConnectionStatus('Connected', 'success');
+                
+                // Send a ping to test connection
+                socket.emit('ping');
+            });
+
+            socket.on('disconnect', function(reason) {
+                logMessage(`❌ Disconnected from server: ${reason}`, 'danger');
+                updateConnectionStatus('Disconnected', 'danger');
+                updateMonitoringStatus(false);
+                
+                // Attempt manual reconnection for ping timeout
+                if (reason === 'ping timeout') {
+                    logMessage('🔄 Attempting manual reconnection due to ping timeout...', 'warning');
+                    setTimeout(() => {
+                        if (!socket.connected) {
+                            socket.connect();
+                        }
+                    }, 3000);
+                }
+            });
+
+            socket.on('connect_error', function(error) {
+                logMessage(`🔥 Connection error: ${error.message}`, 'warning');
+                updateConnectionStatus('Error', 'warning');
+            });
+
+            socket.on('reconnect', function(attemptNumber) {
+                logMessage(`🔄 Reconnected after ${attemptNumber} attempts`, 'success');
+                updateConnectionStatus('Connected', 'success');
+            });
+
+            socket.on('reconnect_attempt', function(attemptNumber) {
+                logMessage(`🔄 Reconnection attempt ${attemptNumber}...`, 'info');
+                updateConnectionStatus('Reconnecting...', 'warning');
+            });
+
+            socket.on('reconnect_error', function(error) {
+                logMessage(`❌ Reconnection failed: ${error.message}`, 'danger');
+            });
+
+            socket.on('reconnect_failed', function() {
+                logMessage('❌ Failed to reconnect after maximum attempts', 'danger');
+                updateConnectionStatus('Connection Failed', 'danger');
+            });
+
+            // Handle pong response
+            socket.on('pong', function() {
+                logMessage('🏓 Pong received from server', 'info');
+            });
+
+            // Data events
+            socket.on('live_alert', function(data) {
+                console.log('🔍 DEBUG: Received live_alert event:', data);
+                handleNewAlert(data);
+            });
+
+            socket.on('traffic_update', function(data) {
+                console.log('🔍 DEBUG: Received traffic_update event:', data);
+                handleTrafficUpdate(data);
+            });
+
+            // Listen for ALL events to debug what's being received
+            socket.onAny((eventName, ...args) => {
+                console.log('🔍 DEBUG: Received ANY event:', eventName, args);
+            });
+
+            socket.on('monitoring_heartbeat', function(data) {
+                handleHeartbeat(data);
+            });
+
+            socket.on('monitoring_status', function(data) {
+                handleStatusUpdate(data);
+            });
+
+            // Periodic ping to keep connection alive
+            setInterval(() => {
+                if (socket.connected) {
+                    socket.emit('ping');
+                }
+            }, 20000); // Send ping every 20 seconds
+        }
+
+        // Handle new security alerts
+        function handleNewAlert(alert) {
+            console.log('🔍 DEBUG: handleNewAlert called with alert:', alert);
+            alertCount++;
+            document.getElementById('alertCount').textContent = alertCount;
+            document.getElementById('alertBadge').textContent = alertCount;
+            
+            logMessage(`🚨 THREAT DETECTED: ${alert.msg}`, 'danger');
+            addAlertToList(alert);
+            
+            // Save updated session state
+            saveMonitoringSession();
+            
+            console.log('🔍 DEBUG: handleNewAlert completed');
+        }
+
+        // Handle traffic updates
+        function handleTrafficUpdate(data) {
+            console.log('🔍 DEBUG: handleTrafficUpdate called with data:', data);
+            trafficCount++;
+            document.getElementById('trafficCount').textContent = trafficCount;
+            
+            logMessage(`📊 Traffic update: ${JSON.stringify(data)}`, 'info');
+            console.log('🔍 DEBUG: About to call updateTrafficChart');
+            updateTrafficChart(data);
+            console.log('🔍 DEBUG: About to call updateDataStreamCapture');
+            updateDataStreamCapture(data);
+            
+            // Save updated session state
+            saveMonitoringSession();
+            
+            console.log('🔍 DEBUG: handleTrafficUpdate completed');
+        }
+
+        // Handle system heartbeats
+        function handleHeartbeat(data) {
+            heartbeatCount++;
+            document.getElementById('heartbeatCount').textContent = heartbeatCount;
+            
+            logMessage(`💓 System heartbeat: ${data.updates_sent} updates sent`, 'success');
+            
+            // Save updated session state
+            saveMonitoringSession();
+        }
+
+        // Handle monitoring status updates
+        function handleStatusUpdate(data) {
+            isMonitoring = data.enabled;
+            updateMonitoringStatus(data.enabled);
+            
+            const reason = data.reason || 'manual control';
+            logMessage(`📡 Monitoring ${data.enabled ? 'STARTED' : 'STOPPED'}: ${reason}`, data.enabled ? 'success' : 'warning');
+            
+            // Update session start time when monitoring starts
+            if (data.enabled && !startTime) {
+                startTime = Date.now();
+            }
+            
+            // Save updated session state
+            saveMonitoringSession();
+        }
+
+        // Add alert to the alerts list
+        function addAlertToList(alert) {
+            const alertsList = document.getElementById('alertsList');
+            
+            // Remove placeholder if it exists
+            if (alertsList.querySelector('.text-muted')) {
+                alertsList.innerHTML = '';
+            }
+
+            const alertDiv = document.createElement('div');
+            alertDiv.className = `alert-item ${alert.level || 'low'}`;
+            alertDiv.innerHTML = `
+                <div class="d-flex justify-content-between align-items-start">
+                    <div class="flex-grow-1">
+                        <div class="d-flex align-items-center mb-2">
+                            <i class="fas fa-exclamation-triangle me-2"></i>
+                            <strong class="text-uppercase">${alert.type || 'Security Alert'}</strong>
+                            <span class="badge bg-${alert.level === 'high' ? 'danger' : alert.level === 'medium' ? 'warning' : 'info'} ms-2">
+                                ${(alert.level || 'low').toUpperCase()}
+                            </span>
+                        </div>
+                        <p class="mb-2">${alert.msg}</p>
+                        <small class="opacity-75">
+                            <i class="fas fa-clock me-1"></i>
+                            ${alert.time}
+                        </small>
+                    </div>
+                </div>
+            `;
+            
+            alertsList.insertBefore(alertDiv, alertsList.firstChild);
+
+            // Keep only last 20 alerts
+            while (alertsList.children.length > 20) {
+                alertsList.removeChild(alertsList.lastChild);
+            }
+        }
+
+        // Update connection status
+        function updateConnectionStatus(status, type) {
+            const statusElement = document.getElementById('connectionStatus');
+            statusElement.textContent = status;
+            statusElement.className = `badge bg-${type}`;
+        }
+
+        // Update monitoring status
+        function updateMonitoringStatus(enabled) {
+            const statusElement = document.getElementById('monitoringStatus');
+            const indicator = document.getElementById('statusIndicator');
+            
+            statusElement.textContent = enabled ? 'Active' : 'Inactive';
+            indicator.className = `status-indicator ${enabled ? 'active' : 'inactive'}`;
+            
+            // Update button states
+            document.getElementById('startBtn').disabled = enabled;
+            document.getElementById('stopBtn').disabled = !enabled;
+        }
+
+        // Start monitoring
+        function startMonitoring() {
+            console.log('🔍 DEBUG: startMonitoring function called');
+            fetch('/monitor', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                },
+                body: 'action=start'
+            })
+            .then(response => {
+                console.log('🔍 DEBUG: Start monitoring response status:', response.status);
+                return response.json();
+            })
+            .then(data => {
+                console.log('🔍 DEBUG: Start monitoring response data:', data);
+                logMessage(`🚀 ${data.message}`, 'success');
+            })
+            .catch(error => {
+                console.log('🔍 DEBUG: Start monitoring error:', error);
+                logMessage(`❌ Failed to start monitoring: ${error.message}`, 'danger');
+            });
+        }
+
+        // Stop monitoring
+        function stopMonitoring() {
+            fetch('/monitor', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                },
+                body: 'action=stop'
+            })
+            .then(response => response.json())
+            .then(data => {
+                logMessage(`⏹️ ${data.message}`, 'warning');
+            })
+            .catch(error => {
+                logMessage(`❌ Failed to stop monitoring: ${error.message}`, 'danger');
+            });
+        }
+
+        // Generate test alert
+        function generateTestAlert() {
+            fetch('/api/test-alert', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                }
+            })
+            .then(response => response.json())
+            .then(data => {
+                logMessage(`🧪 Test alert generated: ${data.message}`, 'info');
+            })
+            .catch(error => {
+                logMessage(`❌ Failed to generate test alert: ${error.message}`, 'danger');
+            });
+        }
+
+        // Initialize traffic chart
+        function initializeChart() {
+            const ctx = document.getElementById('trafficChart').getContext('2d');
+            trafficChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: [],
+                    datasets: [{
+                        label: 'Network Traffic (packets/sec)',
+                        data: [],
+                        borderColor: '#17a2b8',
+                        backgroundColor: 'rgba(23, 162, 184, 0.1)',
+                        borderWidth: 2,
+                        fill: true,
+                        tension: 0.4
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            labels: {
+                                color: 'white'
+                            }
+                        }
+                    },
+                    scales: {
+                        x: {
+                            ticks: { color: 'white' },
+                            grid: { color: 'rgba(255, 255, 255, 0.1)' }
+                        },
+                        y: {
+                            ticks: { color: 'white' },
+                            grid: { color: 'rgba(255, 255, 255, 0.1)' }
+                        }
+                    }
+                }
+            });
+        }
+
+        // Update traffic chart
+        function updateTrafficChart(data) {
+            const now = new Date().toLocaleTimeString();
+            const value = data.count || Math.floor(Math.random() * 100);
+            
+            trafficChart.data.labels.push(now);
+            trafficChart.data.datasets[0].data.push(value);
+            
+            // Keep only last 20 data points
+            if (trafficChart.data.labels.length > 20) {
+                trafficChart.data.labels.shift();
+                trafficChart.data.datasets[0].data.shift();
+            }
+            
+            trafficChart.update('none');
+        }
+
+        // Log system messages
+        function logMessage(message, type = 'info') {
+            const logsContainer = document.getElementById('systemLogs');
+            const timestamp = new Date().toLocaleTimeString();
+            const logEntry = document.createElement('div');
+            logEntry.className = `log-entry ${type}`;
+            logEntry.innerHTML = `[${timestamp}] ${message}`;
+            
+            logsContainer.appendChild(logEntry);
+            logsContainer.scrollTop = logsContainer.scrollHeight;
+            
+            // Keep only last 100 log entries
+            while (logsContainer.children.length > 100) {
+                logsContainer.removeChild(logsContainer.firstChild);
+            }
+        }
+
+        // Clear all logs
+        function clearLogs() {
+            document.getElementById('systemLogs').innerHTML = '<div class="log-entry info">[System] Logs cleared by user</div>';
+            document.getElementById('alertsList').innerHTML = `
+                <div class="text-center text-muted py-4">
+                    <i class="fas fa-shield-alt fa-3x mb-3 opacity-50"></i>
+                    <p>Monitoring for threats...</p>
+                </div>
+            `;
+            
+            // Reset counters
+            alertCount = 0;
+            trafficCount = 0;
+            heartbeatCount = 0;
+            
+            document.getElementById('alertCount').textContent = '0';
+            document.getElementById('trafficCount').textContent = '0';
+            document.getElementById('heartbeatCount').textContent = '0';
+            document.getElementById('alertBadge').textContent = '0';
+            
+            // Save updated session state
+            saveMonitoringSession();
+            
+            logMessage('🧹 Dashboard cleared by user', 'info');
+        }
+
+        // Start uptime counter
+        function startUptimeCounter() {
+            setInterval(() => {
+                const elapsed = Date.now() - startTime;
+                const hours = Math.floor(elapsed / 3600000);
+                const minutes = Math.floor((elapsed % 3600000) / 60000);
+                const seconds = Math.floor((elapsed % 60000) / 1000);
+                
+                document.getElementById('uptime').textContent = 
+                    `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+            }, 1000);
+        }
+
+        // Update Data Stream Capture section
+        function updateDataStreamCapture(data) {
+            // Update statistics - fix field name mismatch
+            if (data.count !== undefined) {
+                document.getElementById('totalCaptured').textContent = data.count;
+            }
+            
+            if (data.packets_per_second !== undefined) {
+                document.getElementById('captureRate').textContent = data.packets_per_second.toFixed(1);
+            }
+            
+            if (data.threat_level !== undefined) {
+                const threatElement = document.getElementById('threatLevel');
+                threatElement.textContent = data.threat_level.charAt(0).toUpperCase() + data.threat_level.slice(1);
+                
+                // Update threat level color
+                threatElement.className = 'stream-stat-value';
+                if (data.threat_level === 'high') {
+                    threatElement.style.color = '#dc3545';
+                } else if (data.threat_level === 'medium') {
+                    threatElement.style.color = '#ffc107';
+                } else {
+                    threatElement.style.color = '#28a745';
+                }
+            }
+            
+            // Add log entry to the data display in terminal format
+            const streamData = document.getElementById('streamData');
+            const now = new Date();
+            const timestamp = now.toLocaleTimeString('en-US', { 
+                hour12: false, 
+                hour: '2-digit', 
+                minute: '2-digit', 
+                second: '2-digit' 
+            });
+            
+            // Create different types of log entries based on data
+            let logEntries = [];
+            
+            if (data.count && data.packets_per_second) {
+                // Main packet capture log
+                const threatColor = data.threat_level === 'high' ? '#ff6b6b' : 
+                                  data.threat_level === 'medium' ? '#ffd93d' : '#6bcf7f';
+                
+                logEntries.push({
+                    text: `[${timestamp}] 📊 Packet capture: ${data.count} packets captured`,
+                    color: '#b9bbbe'
+                });
+                
+                logEntries.push({
+                    text: `[${timestamp}] ⚡ Traffic rate: ${data.packets_per_second.toFixed(1)} packets/sec`,
+                    color: '#7289da'
+                });
+                
+                logEntries.push({
+                    text: `[${timestamp}] 🛡️ Threat assessment: ${data.threat_level.toUpperCase()}`,
+                    color: threatColor
+                });
+                
+                // Protocol breakdown
+                if (data.protocols && Object.keys(data.protocols).length > 0) {
+                    const protocolEntries = Object.entries(data.protocols)
+                        .map(([proto, count]) => `${proto.toUpperCase()}: ${count}`)
+                        .join(' | ');
+                    logEntries.push({
+                        text: `[${timestamp}] 🔍 Protocol breakdown: ${protocolEntries}`,
+                        color: '#43b581'
+                    });
+                }
+                
+                // Status indicator
+                if (data.status) {
+                    logEntries.push({
+                        text: `[${timestamp}] ✅ Monitor status: ${data.status}`,
+                        color: '#72767d'
+                    });
+                }
+            }
+            
+            // Add all log entries
+            logEntries.forEach(entry => {
+                const logEntry = document.createElement('div');
+                logEntry.className = 'log-entry';
+                logEntry.style.color = entry.color;
+                logEntry.style.marginBottom = '2px';
+                logEntry.style.fontFamily = "'Consolas', 'Monaco', monospace";
+                logEntry.textContent = entry.text;
+                
+                // Insert at the top
+                if (streamData.firstChild && streamData.firstChild.textContent.includes('Waiting for packet capture data')) {
+                    streamData.innerHTML = '';
+                }
+                
+                streamData.insertBefore(logEntry, streamData.firstChild);
+            });
+            
+            // Keep only last 100 entries (more for log format)
+            while (streamData.children.length > 100) {
+                streamData.removeChild(streamData.lastChild);
+            }
+            
+            // Auto-scroll to top to show latest data
+            streamData.scrollTop = 0;
+        }
+
+        // Clear stream logs function
+        function clearStreamLogs() {
+            const streamData = document.getElementById('streamData');
+            streamData.innerHTML = '<div class="log-entry" style="color: #7d8590; margin-bottom: 4px; padding: 4px 0; border-left: 3px solid #21262d; padding-left: 12px;"><i class="fas fa-info-circle" style="margin-right: 8px; color: #58a6ff;"></i>[System] Logs cleared - waiting for new data...</div>';
+        }
+
+        // Enhanced log entry creation with better styling
+        function createLogEntry(text, color, icon = '') {
+            const logEntry = document.createElement('div');
+            logEntry.className = 'log-entry';
+            logEntry.style.color = color;
+            logEntry.style.marginBottom = '4px';
+            logEntry.style.padding = '4px 0';
+            logEntry.style.borderLeft = '3px solid #21262d';
+            logEntry.style.paddingLeft = '12px';
+            logEntry.style.fontFamily = "'Consolas', 'Monaco', 'Courier New', monospace";
+            
+            if (icon) {
+                logEntry.innerHTML = `<i class="${icon}" style="margin-right: 8px;"></i>${text}`;
+            } else {
+                logEntry.textContent = text;
+            }
+            
+            return logEntry;
+        }
+    </script>
+</body>
+</html>

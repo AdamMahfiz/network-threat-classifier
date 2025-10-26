@@ -1,0 +1,71 @@
+@startuml Regular User Workflow
+!theme plain
+
+title Regular User Workflow - Network Threat Classification System
+
+start
+
+:User accesses system;
+:Login page;
+
+if (Valid credentials?) then (yes)
+  if (2FA enabled?) then (yes)
+    :Enter 2FA token;
+    if (Valid token?) then (no)
+      :Show error;
+      stop
+    endif
+  endif
+  
+  :User Dashboard;
+  
+  while (Session active?) is (yes)
+    
+    :Choose feature;
+    
+    if (Feature selection) then (Profile Management)
+      :Update Profile;
+      :Edit personal information;
+      :Change password;
+      :Manage 2FA settings;
+      
+    elseif (Threat Analysis) then
+      :Select analysis type;
+      if (Analysis type) then (Text)
+        :Paste log text;
+        :Analyze threat;
+      elseif (File Upload) then
+        :Upload log file;
+        :Process file;
+      else (Sample Data)
+        :Generate sample logs;
+        :Analyze sample;
+      endif
+      :View results;
+      
+    else (Real-time Monitoring)
+      :Monitor network traffic;
+      :View live alerts;
+      :Check system status;
+    endif
+    
+    :Download reports (optional);
+    
+    note right
+      Session timeout: 30 minutes
+      Auto-logout on inactivity
+    end note
+    
+  endwhile (timeout/logout)
+  
+  :Clear session data;
+  :Redirect to login;
+  
+else (no)
+  :Show login error;
+  :Return to login page;
+endif
+
+stop
+
+@enduml
