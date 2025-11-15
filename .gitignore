@@ -10,6 +10,7 @@ env/
 .venv
 pip-log.txt
 pip-delete-this-directory.txt
+*.pyc
 
 # Testing
 .coverage
@@ -26,6 +27,7 @@ uploads/
 models/trained/
 data/raw/
 data/interim/
+data/threat_classifier.db
 
 # IDE
 .vscode/settings.json
@@ -38,3 +40,5 @@ Thumbs.db
 # Project specific
 outputs/
 experiments/
+static/reports/*.pdf
+*_export_*.csv

@@ -1,8 +1,9 @@
-from sqlalchemy import create_engine, Column, Integer, String, DateTime, Float, JSON, ForeignKey, Boolean, Table
+from sqlalchemy import create_engine, Column, Integer, String, DateTime, Float, JSON, ForeignKey, Boolean, Table, Text
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship
-from datetime import datetime
+from datetime import datetime, timedelta
 import uuid
+import secrets
 from werkzeug.security import generate_password_hash, check_password_hash
 from flask_login import UserMixin
 
@@ -31,6 +32,7 @@ class User(UserMixin, Base):
     # Relationships
     roles = relationship('Role', secondary=user_roles, back_populates='users')
     analysis_sessions = relationship('AnalysisSession', back_populates='user')
+    password_reset_tokens = relationship('PasswordResetToken', back_populates='user', cascade='all, delete-orphan')
     
     def set_password(self, password):
         self.password_hash = generate_password_hash(password)
@@ -117,3 +119,35 @@ class ThreatEvent(Base):
     
     # Relationships
     session = relationship("AnalysisSession", back_populates="threat_events")
+
+class PasswordResetToken(Base):
+    __tablename__ = 'password_reset_tokens'
+    
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey('users.id', ondelete='CASCADE'), nullable=False)
+    token = Column(String(255), unique=True, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    expires_at = Column(DateTime, nullable=False)
+    used = Column(Boolean, default=False)
+    
+    # Relationships
+    user = relationship('User', back_populates='password_reset_tokens')
+    
+    def __init__(self, user_id, expiry_hours=24):
+        self.user_id = user_id
+        self.token = secrets.token_urlsafe(32)
+        self.created_at = datetime.utcnow()
+        self.expires_at = self.created_at + timedelta(hours=expiry_hours)
+        self.used = False
+    
+    def is_expired(self):
+        """Check if the token has expired"""
+        return datetime.utcnow() > self.expires_at
+    
+    def is_valid(self):
+        """Check if the token is valid (not used and not expired)"""
+        return not self.used and not self.is_expired()
+    
+    def mark_as_used(self):
+        """Mark the token as used"""
+        self.used = True

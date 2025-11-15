@@ -630,15 +630,15 @@
                             <i class="fas fa-tachometer-alt me-1"></i>Dashboard
                         </a>
                     </li>
+                    <li class="nav-item">
+                        <a class="nav-link {% if request.path == '/audit' %}active{% endif %}" href="/audit">
+                            <i class="fas fa-history me-1"></i>Audit Log
+                        </a>
+                    </li>
                     {% if current_user.has_role('admin') %}
                     <li class="nav-item">
                         <a class="nav-link {% if request.path == '/db_health' %}active{% endif %}" href="/db_health">
                             <i class="fas fa-database me-1"></i>DB Health
-                        </a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link {% if request.path == '/audit' %}active{% endif %}" href="/audit">
-                            <i class="fas fa-history me-1"></i>Audit Log
                         </a>
                     </li>
                     <li class="nav-item">

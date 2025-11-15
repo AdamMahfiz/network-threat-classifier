@@ -698,6 +698,67 @@
         
         // Chart data limits
         const MAX_DATA_POINTS = 20;
+        
+        // Request deduplication and retry logic
+        let trendsRequestInProgress = false;
+        let trendsRequestController = null;
+        
+        async function fetchTrendsWithRetry(maxRetries = 3, delay = 1000) {
+            // Prevent multiple simultaneous requests
+            if (trendsRequestInProgress) {
+                console.log('Trends request already in progress, skipping...');
+                return null;
+            }
+            
+            trendsRequestInProgress = true;
+            
+            // Cancel any previous request
+            if (trendsRequestController) {
+                trendsRequestController.abort();
+            }
+            
+            trendsRequestController = new AbortController();
+            
+            for (let attempt = 1; attempt <= maxRetries; attempt++) {
+                try {
+                    console.log(`Fetching trends data (attempt ${attempt}/${maxRetries})...`);
+                    
+                    const response = await fetch('/api/trends', {
+                        signal: trendsRequestController.signal,
+                        headers: {
+                            'Cache-Control': 'no-cache'
+                        }
+                    });
+                    
+                    if (!response.ok) {
+                        throw new Error(`HTTP error! status: ${response.status}`);
+                    }
+                    
+                    const data = await response.json();
+                    console.log('Trends data fetched successfully:', data);
+                    trendsRequestInProgress = false;
+                    return data;
+                    
+                } catch (error) {
+                    console.warn(`Trends fetch attempt ${attempt} failed:`, error.message);
+                    
+                    if (error.name === 'AbortError') {
+                        console.log('Trends request was aborted');
+                        trendsRequestInProgress = false;
+                        return null;
+                    }
+                    
+                    if (attempt === maxRetries) {
+                        console.error('All trends fetch attempts failed');
+                        trendsRequestInProgress = false;
+                        throw error;
+                    }
+                    
+                    // Wait before retrying
+                    await new Promise(resolve => setTimeout(resolve, delay * attempt));
+                }
+            }
+        }
         const MAX_ALERTS = 10;
 
         // Get theme-appropriate colors
@@ -766,30 +827,28 @@
                 .catch(err => console.error('Error updating pie chart:', err));
         }
 
-        window.updateTrendChart = function() {
+        window.updateTrendChart = async function() {
             if (!window.trendChart) return;
-            // Use aggregated DB data for the last 30 days
-            fetch('/api/trends')
-                .then(r => {
-                    if (!r.ok) throw new Error(`HTTP error! status: ${r.status}`);
-                    return r.json();
-                })
-                .then(data => {
-                    if (window.trendChart) {
-                        const labels = data.map(d => d.date);
-                        const lows = data.map(d => d.low);
-                        const meds = data.map(d => d.medium);
-                        const highs = data.map(d => d.high);
-                        if (window.trendChart && window.trendChart.data && window.trendChart.data.datasets) {
-                            window.trendChart.data.labels = labels;
-                            window.trendChart.data.datasets[0].data = lows;
-                            window.trendChart.data.datasets[1].data = meds;
-                            window.trendChart.data.datasets[2].data = highs;
-                            window.trendChart.update();
-                        }
-                    }
-                })
-                .catch(err => console.error('Error updating trend chart:', err));
+            
+            try {
+                const data = await fetchTrendsWithRetry();
+                if (!data) return; // Request was skipped or aborted
+                
+                const labels = data.map(d => d.date);
+                const lows = data.map(d => d.low);
+                const meds = data.map(d => d.medium);
+                const highs = data.map(d => d.high);
+                
+                if (window.trendChart && window.trendChart.data && window.trendChart.data.datasets) {
+                    window.trendChart.data.labels = labels;
+                    window.trendChart.data.datasets[0].data = lows;
+                    window.trendChart.data.datasets[1].data = meds;
+                    window.trendChart.data.datasets[2].data = highs;
+                    window.trendChart.update();
+                }
+            } catch (err) {
+                console.error('Error updating trend chart:', err);
+            }
         }
 
         window.updateDashboardForLatestSession = function() {
@@ -870,93 +929,160 @@
                     document.getElementById('totalLogs').textContent = '0';
                 });
                 // Trend chart: aggregated DB data (last 30 days)
-                fetch('/api/trends').then(r => r.json()).then(data => {
-                    const ctx = document.getElementById('trendChart').getContext('2d');
-                    const labels = data.map(d => d.date);
-                    const lows = data.map(d => d.low);
-                    const meds = data.map(d => d.medium);
-                    const highs = data.map(d => d.high);
-                    if (window.trendChart && window.trendChart.data && window.trendChart.data.datasets) {
-                        window.trendChart.data.labels = labels;
-                        window.trendChart.data.datasets[0].data = lows;
-                        window.trendChart.data.datasets[1].data = meds;
-                        window.trendChart.data.datasets[2].data = highs;
-                        window.trendChart.update();
-                    } else {
-                        const trendChart = new Chart(ctx, {
-                            type: 'line',
-                            data: {
-                                labels: labels,
-                                datasets: [
-                                    { 
-                                        label: 'Low', 
-                                        data: lows, 
-                                        borderColor: '#10b981',
-                                        backgroundColor: 'rgba(16, 185, 129, 0.1)',
-                                        fill: true,
-                                        tension: 0.4
-                                    },
-                                    { 
-                                        label: 'Medium', 
-                                        data: meds, 
-                                        borderColor: '#f59e0b',
-                                        backgroundColor: 'rgba(245, 158, 11, 0.1)',
-                                        fill: true,
-                                        tension: 0.4
-                                    },
-                                    { 
-                                        label: 'High', 
-                                        data: highs, 
-                                        borderColor: '#ef4444',
-                                        backgroundColor: 'rgba(239, 68, 68, 0.1)',
-                                        fill: true,
-                                        tension: 0.4
-                                    }
-                                ]
-                            },
-                            options: {
-                                responsive: true,
-                                maintainAspectRatio: false,
-                                interaction: { mode: 'index', intersect: false },
-                                plugins: {
-                                    legend: { 
-                                        position: 'bottom',
-                                        labels: {
-                                            padding: 20,
-                                            usePointStyle: true,
-                                            font: {
-                                                size: 12,
-                                                family: 'Inter'
-                                            }
+                (async () => {
+                    try {
+                        const data = await fetchTrendsWithRetry();
+                        if (!data) return; // Request was skipped or aborted
+                        
+                        const ctx = document.getElementById('trendChart').getContext('2d');
+                        const labels = data.map(d => d.date);
+                        const lows = data.map(d => d.low);
+                        const meds = data.map(d => d.medium);
+                        const highs = data.map(d => d.high);
+                        
+                        if (window.trendChart && window.trendChart.data && window.trendChart.data.datasets) {
+                            window.trendChart.data.labels = labels;
+                            window.trendChart.data.datasets[0].data = lows;
+                            window.trendChart.data.datasets[1].data = meds;
+                            window.trendChart.data.datasets[2].data = highs;
+                            window.trendChart.update();
+                        } else {
+                            const trendChart = new Chart(ctx, {
+                                type: 'line',
+                                data: {
+                                    labels: labels,
+                                    datasets: [
+                                        { 
+                                            label: 'Low', 
+                                            data: lows, 
+                                            borderColor: '#10b981',
+                                            backgroundColor: 'rgba(16, 185, 129, 0.1)',
+                                            fill: true,
+                                            tension: 0.4
+                                        },
+                                        { 
+                                            label: 'Medium', 
+                                            data: meds, 
+                                            borderColor: '#f59e0b',
+                                            backgroundColor: 'rgba(245, 158, 11, 0.1)',
+                                            fill: true,
+                                            tension: 0.4
+                                        },
+                                        { 
+                                            label: 'High', 
+                                            data: highs, 
+                                            borderColor: '#ef4444',
+                                            backgroundColor: 'rgba(239, 68, 68, 0.1)',
+                                            fill: true,
+                                            tension: 0.4
                                         }
-                                    },
-                                    tooltip: {
-                                            backgroundColor: getThemeColors().tooltipBg,
-                                            titleColor: getThemeColors().tooltipTitle,
-                                            bodyColor: getThemeColors().tooltipBody,
-                                            borderColor: getThemeColors().tooltipBorder,
-                                            borderWidth: 1,
-                                            cornerRadius: 8
-                                        }
+                                    ]
                                 },
-                                scales: {
-                                    y: { 
-                                        beginAtZero: true,
-                                        grid: {
-                                            color: '#334155'
-                                        }
+                                options: {
+                                    responsive: true,
+                                    maintainAspectRatio: false,
+                                    interaction: { mode: 'index', intersect: false },
+                                    plugins: {
+                                        legend: { 
+                                            position: 'bottom',
+                                            labels: {
+                                                padding: 20,
+                                                usePointStyle: true,
+                                                font: {
+                                                    size: 12,
+                                                    family: 'Inter'
+                                                }
+                                            }
+                                        },
+                                        tooltip: {
+                                                backgroundColor: getThemeColors().tooltipBg,
+                                                titleColor: getThemeColors().tooltipTitle,
+                                                bodyColor: getThemeColors().tooltipBody,
+                                                borderColor: getThemeColors().tooltipBorder,
+                                                borderWidth: 1,
+                                                cornerRadius: 8
+                                            }
                                     },
-                                    x: {
-                                        grid: {
-                                            color: '#334155'
+                                    scales: {
+                                        y: { 
+                                            beginAtZero: true,
+                                            grid: {
+                                                color: '#334155'
+                                            }
+                                        },
+                                        x: {
+                                            grid: {
+                                                color: '#334155'
+                                            }
                                         }
                                     }
                                 }
-                            }
-                        });
-                        window.trendChart = trendChart;
+                            });
+                            window.trendChart = trendChart;
+                        }
+                    } catch (err) {
+                        console.error('Error initializing trend chart:', err);
+                        // Initialize empty trend chart if API fails
+                        const ctx = document.getElementById('trendChart').getContext('2d');
+                        if (!window.trendChart) {
+                            window.trendChart = new Chart(ctx, {
+                                type: 'line',
+                                data: {
+                                    labels: [],
+                                    datasets: [
+                                        { 
+                                            label: 'Low', 
+                                            data: [], 
+                                            borderColor: '#10b981',
+                                            backgroundColor: 'rgba(16, 185, 129, 0.1)',
+                                            fill: true,
+                                            tension: 0.4
+                                        },
+                                        { 
+                                            label: 'Medium', 
+                                            data: [], 
+                                            borderColor: '#f59e0b',
+                                            backgroundColor: 'rgba(245, 158, 11, 0.1)',
+                                            fill: true,
+                                            tension: 0.4
+                                        },
+                                        { 
+                                            label: 'High', 
+                                            data: [], 
+                                            borderColor: '#ef4444',
+                                            backgroundColor: 'rgba(239, 68, 68, 0.1)',
+                                            fill: true,
+                                            tension: 0.4
+                                        }
+                                    ]
+                                },
+                                options: {
+                                    responsive: true,
+                                    maintainAspectRatio: false,
+                                    plugins: {
+                                        legend: {
+                                            labels: {
+                                                color: '#e2e8f0'
+                                            }
+                                        }
+                                    },
+                                    scales: {
+                                        y: {
+                                            grid: {
+                                                color: '#334155'
+                                            }
+                                        },
+                                        x: {
+                                            grid: {
+                                                color: '#334155'
+                                            }
+                                        }
+                                    }
+                                }
+                            });
+                        }
                     }
-                });
+                })();
                 
                 // Initialize real-time charts
                 initializeRealTimeCharts();
