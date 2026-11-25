@@ -13,3 +13,6 @@ flask-login
 pyotp
 qrcode
 pillow
+flask-cors>=6.0.5
+sqlalchemy>=2.0
+python-dotenv>=1.0
