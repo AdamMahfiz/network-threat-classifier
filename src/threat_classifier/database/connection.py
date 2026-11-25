@@ -20,20 +20,41 @@ class DatabaseConnection:
         return cls._instance
     
     def _initialize(self):
-        """Initialize database connection using SQLite exclusively"""
-        # Use SQLite as the primary and only database
+        """Initialise the engine from DATABASE_URL, falling back to a SQLite file.
+
+        DATABASE_URL (e.g. postgresql+psycopg2://user:pass@host/db) takes precedence.
+        Without it, SQLITE_DATABASE_PATH (default data/threat_classifier.db) is used.
+        """
         try:
-            sqlite_path = os.getenv('SQLITE_DATABASE_PATH', 'data/threat_classifier.db')
-            self._create_sqlite_engine(sqlite_path)
-            logger.info("SQLite database connection initialized successfully")
+            database_url = os.getenv('DATABASE_URL', '').strip()
+            if database_url:
+                self._create_engine_from_url(database_url)
+                logger.info("Database connection initialised from DATABASE_URL")
+            else:
+                sqlite_path = os.getenv('SQLITE_DATABASE_PATH', 'data/threat_classifier.db')
+                self._create_sqlite_engine(sqlite_path)
+                logger.info("SQLite database connection initialized successfully")
         except Exception as e:
-            logger.error(f"Failed to initialize SQLite database connection: {str(e)}")
+            logger.error(f"Failed to initialise database connection: {str(e)}")
             raise
-    
+
+    def _create_engine_from_url(self, database_url):
+        """Create an engine for a server database (PostgreSQL, MySQL, ...)."""
+        self.engine = create_engine(
+            database_url,
+            echo=False,
+            pool_pre_ping=True,
+            pool_size=int(os.getenv('DB_POOL_SIZE', '5')),
+            max_overflow=int(os.getenv('DB_MAX_OVERFLOW', '10')),
+        )
+        self.SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=self.engine)
+        with self.engine.connect() as conn:
+            conn.execute(text('SELECT 1'))
+
     def _create_sqlite_engine(self, sqlite_path):
         """Create SQLite engine with appropriate configuration"""
         # Ensure the directory exists
-        os.makedirs(os.path.dirname(sqlite_path), exist_ok=True)
+        os.makedirs(os.path.dirname(sqlite_path) or '.', exist_ok=True)
         
         sqlite_url = f"sqlite:///{sqlite_path}"
         self.engine = create_engine(
@@ -105,10 +126,11 @@ class DatabaseConnection:
                 result = conn.execute(text("PRAGMA database_list"))
                 db_info = result.fetchone()
                 
+                dialect = self.engine.dialect.name
                 return {
                     "status": "connected",
-                    "type": "sqlite",
-                    "database": db_info[2] if db_info else "unknown",
+                    "type": dialect,
+                    "database": db_info[2] if db_info else str(self.engine.url.database),
                     "url": str(self.engine.url).replace(str(self.engine.url.password), '***') if self.engine.url.password else str(self.engine.url)
                 }
         except Exception as e:
