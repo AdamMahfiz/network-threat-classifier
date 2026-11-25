@@ -116,30 +116,32 @@ class DatabaseConnection:
                  time.sleep(1)
     
     def get_database_info(self):
-        """Get database connection information"""
+        """Get database connection information (works for SQLite and server databases)"""
         if not self.engine:
             return {"status": "disconnected", "type": "unknown"}
-        
+
+        dialect = self.engine.dialect.name
         try:
             with self.engine.connect() as conn:
-                # For SQLite, get database file info
-                result = conn.execute(text("PRAGMA database_list"))
-                db_info = result.fetchone()
-                
-                dialect = self.engine.dialect.name
+                if dialect == 'sqlite':
+                    row = conn.execute(text("PRAGMA database_list")).fetchone()
+                    database = row[2] if row else "unknown"
+                else:
+                    database = conn.execute(text("SELECT current_database()")).scalar()
+
                 return {
                     "status": "connected",
                     "type": dialect,
-                    "database": db_info[2] if db_info else str(self.engine.url.database),
-                    "url": str(self.engine.url).replace(str(self.engine.url.password), '***') if self.engine.url.password else str(self.engine.url)
+                    "database": database,
+                    "url": self.engine.url.render_as_string(hide_password=True),
                 }
         except Exception as e:
             return {
                 "status": "error",
-                "type": "sqlite",
+                "type": dialect,
                 "error": str(e)
             }
-    
+
     def close(self):
         """Close the database connection"""
         try:
