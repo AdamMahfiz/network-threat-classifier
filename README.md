@@ -111,3 +111,15 @@ network-threat-classifier/
 
 ## License
 MIT License - see LICENSE file for details.
+
+## Running with Docker (2.0)
+
+```bash
+cp .env.example .env    # then set SECRET_KEY (32+ chars) and POSTGRES_PASSWORD
+docker compose up --build -d
+curl http://localhost:5000/health
+```
+
+The app runs in production mode: login is required for everything except `/auth/*` and `/health`,
+debug is off, and it uses PostgreSQL. Create the first account at `/auth/register`; it is the admin.
+Later self-registration is disabled.

@@ -8,6 +8,10 @@ from flask_login import LoginManager, login_user, logout_user, current_user
 from werkzeug.security import generate_password_hash, check_password_hash
 from src.threat_classifier.database.connection import db
 from src.threat_classifier.database.models import User, Role
+from src.threat_classifier.utils.security import LoginThrottle
+
+# Lockout after repeated failed logins; app.py sets the limits from config.
+login_throttle = LoginThrottle()
 
 login_manager = LoginManager()
 login_manager.login_view = 'auth.login'
@@ -29,6 +33,15 @@ def load_user(user_id):
         db_session.close()
 
 class AuthManager:
+    @staticmethod
+    def user_count():
+        """Number of accounts that exist (used to allow the bootstrap admin)."""
+        db_session = db.get_session()
+        try:
+            return db_session.query(User).count()
+        finally:
+            db_session.close()
+
     @staticmethod
     def register_user(username, email, password, first_name=None, last_name=None, role=None):
         """Register a new user"""

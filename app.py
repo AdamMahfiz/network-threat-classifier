@@ -6,7 +6,7 @@ Main Flask application
 import os
 import time
 import threading
-from flask import Flask, render_template, request, redirect, url_for, flash, send_file, send_from_directory, jsonify, session
+from flask import Flask, render_template, request, redirect, url_for, flash, send_file, send_from_directory, jsonify, session, abort, current_app
 from flask_cors import CORS
 import pandas as pd
 import numpy as np
@@ -45,19 +45,34 @@ from src.threat_classifier.models.threat_classifier import ThreatClassifier
 from src.threat_classifier.data.data_processor import DataProcessor
 from src.threat_classifier.utils.logger import setup_logger
 from src.threat_classifier.data.nsl_kdd_processor import NSLKDDProcessor
+from src.threat_classifier.utils.security import SECURITY_HEADERS
+from src.threat_classifier.auth.auth_manager import login_throttle
+from config import get_config, APP_VERSION
 
 # Initialize Flask app
 app = Flask(__name__, static_folder='static', static_url_path='/static')
-app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'dev-secret-key')
+
+cfg = get_config()
+app.config['APP_VERSION'] = APP_VERSION
+app.config['APP_ENV'] = cfg.app_env
+app.config['SECRET_KEY'] = cfg.secret_key
 app.config['UPLOAD_FOLDER'] = 'uploads'
-app.config['MAX_CONTENT_LENGTH'] = 100 * 1024 * 1024  # Increased to 100MB
+app.config['MAX_CONTENT_LENGTH'] = cfg.upload_max_mb * 1024 * 1024
+
+# Session cookies: not readable by JavaScript, sent only with same-site requests.
+app.config['SESSION_COOKIE_HTTPONLY'] = True
+app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
+app.config['SESSION_COOKIE_SECURE'] = cfg.is_production
+app.config['REMEMBER_COOKIE_SECURE'] = cfg.is_production
+app.config['REMEMBER_COOKIE_HTTPONLY'] = True
 
 # Disable caching for development
 app.config['SEND_FILE_MAX_AGE_DEFAULT'] = 0
 
-# Session timeout configuration (30 minutes of inactivity)
-app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(minutes=30)
-app.config['SESSION_TIMEOUT'] = 30 * 60  # 30 minutes in seconds
+# Session timeout configuration (inactivity, from config)
+app.config['PERMANENT_SESSION_LIFETIME'] = cfg.session_lifetime
+app.config['SESSION_TIMEOUT'] = cfg.session_timeout_minutes * 60
+app.config['ALLOW_SELF_REGISTRATION'] = cfg.allow_self_registration
 app.config['MAIL_SERVER'] = os.environ.get('MAIL_SERVER')
 app.config['MAIL_PORT'] = int(os.environ.get('MAIL_PORT', 587))
 app.config['MAIL_USE_TLS'] = os.environ.get('MAIL_USE_TLS', 'True') == 'True'
@@ -65,20 +80,21 @@ app.config['MAIL_USERNAME'] = os.environ.get('MAIL_USERNAME')
 app.config['MAIL_PASSWORD'] = os.environ.get('MAIL_PASSWORD')
 app.config['MAIL_DEFAULT_SENDER'] = os.environ.get('MAIL_DEFAULT_SENDER')
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
-app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('DATABASE_URL', 'sqlite:///threat_classifier.db')
 
-print("MAIL_SERVER:", app.config['MAIL_SERVER'])
-print("MAIL_USERNAME:", app.config['MAIL_USERNAME'])
-print("MAIL_DEFAULT_SENDER:", app.config['MAIL_DEFAULT_SENDER'])
+# Login lockout limits
+login_throttle.max_failures = cfg.login_max_failures
+login_throttle.lockout_seconds = cfg.login_lockout_minutes * 60
+
+print("MAIL_SERVER:", app.config['MAIL_SERVER'] or '(not configured)')
 
 mail = Mail(app)
 
 # Initialize SocketIO with better compatibility settings
 socketio = SocketIO(app, 
-                   async_mode='threading',
-                   cors_allowed_origins="*",
-                   logger=True,
-                   engineio_logger=True,
+                   async_mode=cfg.socketio_async_mode,
+                   cors_allowed_origins=cfg.cors_origins or None,  # None = same-origin only
+                   logger=cfg.debug,
+                   engineio_logger=cfg.debug,
                    ping_timeout=60,
                    ping_interval=25,
                    max_http_buffer_size=2000000,
@@ -87,8 +103,8 @@ socketio = SocketIO(app,
                    allow_upgrades=True,
                    transports=['websocket', 'polling'])
 
-# Enable CORS
-CORS(app)
+# CORS: only origins listed in CORS_ORIGINS receive cross-origin access (none by default)
+CORS(app, origins=cfg.cors_origins)
 
 # Setup logging
 logger = setup_logger('threat_classifier', 'logs/app.log')
@@ -130,6 +146,50 @@ login_manager.init_app(app)
 def unauthorized():
     flash('You do not have permission to access this page.', 'danger')
     return redirect(url_for('auth.unauthorized'))
+
+# ---------------------------------------------------------------------------
+# Access control (2.0)
+# Every route requires a logged-in user unless it is explicitly public.
+# New routes are protected by default, so forgetting a decorator cannot expose data.
+# ---------------------------------------------------------------------------
+PUBLIC_PATHS = ('/health', '/socket.io')
+ADMIN_PATH_PREFIXES = (
+    '/db_health', '/api/db_health', '/api/db_cleanup',
+    '/api/test-alert', '/api/test-email-alert', '/test-monitor',
+)
+
+@app.before_request
+def enforce_authentication():
+    path = request.path
+    endpoint = request.endpoint or ''
+
+    if endpoint == 'static' or endpoint.startswith('auth.') or endpoint == 'unauthorized':
+        return None
+    if path == PUBLIC_PATHS[0] or path.startswith(PUBLIC_PATHS[1]):
+        return None
+
+    # Test-only monitoring routes exist only when explicitly enabled outside production.
+    if path.startswith('/test-monitor') and not cfg.enable_test_routes:
+        abort(404)
+
+    if not current_user.is_authenticated:
+        if path.startswith('/api/') or request.is_json:
+            return jsonify({'error': 'Authentication required'}), 401
+        return redirect(url_for('auth.login', next=path))
+
+    if path.startswith(ADMIN_PATH_PREFIXES) and not current_user.has_role('admin'):
+        if path.startswith('/api/'):
+            return jsonify({'error': 'Administrator role required'}), 403
+        abort(403)
+    return None
+
+@app.after_request
+def add_security_headers(response):
+    for header, value in SECURITY_HEADERS.items():
+        response.headers.setdefault(header, value)
+    if cfg.is_production:
+        response.headers.setdefault('Strict-Transport-Security', 'max-age=31536000; includeSubDomains')
+    return response
 
 # Session timeout handler
 @app.before_request
@@ -725,7 +785,8 @@ def health():
     return jsonify({
         'status': 'healthy',
         'timestamp': datetime.now().isoformat(),
-        'version': '1.0.0'
+        'version': APP_VERSION,
+        'environment': cfg.app_env
     })
 
 @app.route('/api/classify', methods=['POST'])
@@ -735,6 +796,10 @@ def classify_logs():
         data = request.get_json()
         if not data or 'logs' not in data:
             return jsonify({'error': 'No log data provided'}), 400
+        if not isinstance(data['logs'], str):
+            return jsonify({'error': "'logs' must be a string with one log entry per line"}), 400
+        if len(data['logs']) > 200_000:
+            return jsonify({'error': 'Log payload too large (max 200,000 characters)'}), 413
         
         # Create new analysis session
         session_id = str(uuid.uuid4())
@@ -1532,6 +1597,9 @@ def api_trends():
 
 @socketio.on('connect')
 def handle_connect():
+    # Live alerts and traffic data are for signed-in users only.
+    if not current_user.is_authenticated:
+        return False
     print(f'Client connected: {request.sid}')
     print(f'Client namespace: {request.namespace}')
     emit('connection_status', {'status': 'connected'})
@@ -1858,12 +1926,12 @@ def api_db_cleanup():
 
 @app.route('/test-monitor')
 def test_monitor():
-    """Test monitoring page that bypasses authentication"""
+    """Test monitoring page (admin only; enabled only with ENABLE_TEST_ROUTES=true outside production)"""
     return render_template('test_monitor.html')
 
 @app.route('/test-monitor/start', methods=['POST'])
 def test_monitor_start():
-    """Start monitoring without authentication for testing"""
+    """Start monitoring (test routes; admin only)"""
     global LIVE_MONITORING_ENABLED
     try:
         LIVE_MONITORING_ENABLED = True
@@ -1888,7 +1956,7 @@ def test_monitor_start():
 
 @app.route('/test-monitor/stop', methods=['POST'])
 def test_monitor_stop():
-    """Stop monitoring without authentication for testing"""
+    """Stop monitoring (test routes; admin only)"""
     global LIVE_MONITORING_ENABLED
     try:
         LIVE_MONITORING_ENABLED = False
@@ -1962,8 +2030,8 @@ if __name__ == '__main__':
     print("🚀 Starting Network Threat Classifier...")
     
     # Try different ports if the default one is in use
-    port = 5000
-    max_port = 5010  # Try up to this port
+    port = cfg.port
+    max_port = cfg.port + 10  # Try up to ten ports above the configured one
     
     while port <= max_port:
         try:
@@ -1980,7 +2048,7 @@ if __name__ == '__main__':
             
             # Start the server with a specific port
             print(f"📊 Dashboard available at: http://localhost:{port}")
-            socketio.run(app, debug=True, host='0.0.0.0', port=port)
+            socketio.run(app, debug=cfg.debug, host='0.0.0.0', port=port, allow_unsafe_werkzeug=not cfg.is_production)
             break
         except OSError as e:
             print(f"Port {port} is in use, trying next port...")

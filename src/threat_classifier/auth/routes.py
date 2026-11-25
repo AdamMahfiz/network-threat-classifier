@@ -2,7 +2,7 @@ from flask import Blueprint, render_template, redirect, url_for, flash, request,
 from flask_login import login_required, current_user, logout_user
 from flask_mail import Message
 from werkzeug.security import generate_password_hash, check_password_hash
-from src.threat_classifier.auth.auth_manager import AuthManager
+from src.threat_classifier.auth.auth_manager import AuthManager, login_throttle
 from src.threat_classifier.database.connection import db
 from src.threat_classifier.database.models import User, Role, PasswordResetToken
 from io import BytesIO
@@ -19,10 +19,17 @@ def login():
         username = request.form.get('username')
         password = request.form.get('password')
         remember = 'remember' in request.form
-        
+        ip = request.remote_addr or 'unknown'
+
+        if login_throttle.is_locked(username, ip):
+            minutes = max(1, login_throttle.seconds_remaining(username, ip) // 60 + 1)
+            flash(f'Too many failed attempts. Try again in about {minutes} minute(s).', 'danger')
+            return render_template('auth/login.html'), 429
+
         success, message = AuthManager.login(username, password, remember)
-        
+
         if success:
+            login_throttle.record_success(username, ip)
             if message == "2FA":
                 # Redirect to 2FA verification page
                 return redirect(url_for('auth.verify_2fa'))
@@ -32,6 +39,7 @@ def login():
                 next_page = request.args.get('next')
                 return redirect(next_page or url_for('index'))
         else:
+            login_throttle.record_failure(username, ip)
             flash(message, 'danger')
     
     return render_template('auth/login.html')
@@ -64,6 +72,13 @@ def register():
     if current_user.is_authenticated:
         return redirect(url_for('index'))
     
+    # Self-registration is off by default in production. The first account
+    # (bootstrap admin) is always allowed; after that, accounts are created by an admin.
+    if request.method == 'POST' and not current_app.config['ALLOW_SELF_REGISTRATION']:
+        if AuthManager.user_count() > 0:
+            flash('Self-registration is disabled. Ask an administrator to create your account.', 'warning')
+            return redirect(url_for('auth.login'))
+
     if request.method == 'POST':
         username = request.form.get('username')
         email = request.form.get('email')

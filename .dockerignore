@@ -1,0 +1,13 @@
+.git
+.venv*
+**/__pycache__
+*.pyc
+.pytest_cache
+.secrets
+.env
+data/*.db
+logs/*
+uploads/*
+*.docx
+*.pdf
+scratch

@@ -20,20 +20,41 @@ class DatabaseConnection:
         return cls._instance
     
     def _initialize(self):
-        """Initialize database connection using SQLite exclusively"""
-        # Use SQLite as the primary and only database
+        """Initialise the engine from DATABASE_URL, falling back to a SQLite file.
+
+        DATABASE_URL (e.g. postgresql+psycopg2://user:pass@host/db) takes precedence.
+        Without it, SQLITE_DATABASE_PATH (default data/threat_classifier.db) is used.
+        """
         try:
-            sqlite_path = os.getenv('SQLITE_DATABASE_PATH', 'data/threat_classifier.db')
-            self._create_sqlite_engine(sqlite_path)
-            logger.info("SQLite database connection initialized successfully")
+            database_url = os.getenv('DATABASE_URL', '').strip()
+            if database_url:
+                self._create_engine_from_url(database_url)
+                logger.info("Database connection initialised from DATABASE_URL")
+            else:
+                sqlite_path = os.getenv('SQLITE_DATABASE_PATH', 'data/threat_classifier.db')
+                self._create_sqlite_engine(sqlite_path)
+                logger.info("SQLite database connection initialized successfully")
         except Exception as e:
-            logger.error(f"Failed to initialize SQLite database connection: {str(e)}")
+            logger.error(f"Failed to initialise database connection: {str(e)}")
             raise
-    
+
+    def _create_engine_from_url(self, database_url):
+        """Create an engine for a server database (PostgreSQL, MySQL, ...)."""
+        self.engine = create_engine(
+            database_url,
+            echo=False,
+            pool_pre_ping=True,
+            pool_size=int(os.getenv('DB_POOL_SIZE', '5')),
+            max_overflow=int(os.getenv('DB_MAX_OVERFLOW', '10')),
+        )
+        self.SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=self.engine)
+        with self.engine.connect() as conn:
+            conn.execute(text('SELECT 1'))
+
     def _create_sqlite_engine(self, sqlite_path):
         """Create SQLite engine with appropriate configuration"""
         # Ensure the directory exists
-        os.makedirs(os.path.dirname(sqlite_path), exist_ok=True)
+        os.makedirs(os.path.dirname(sqlite_path) or '.', exist_ok=True)
         
         sqlite_url = f"sqlite:///{sqlite_path}"
         self.engine = create_engine(
@@ -95,29 +116,32 @@ class DatabaseConnection:
                  time.sleep(1)
     
     def get_database_info(self):
-        """Get database connection information"""
+        """Get database connection information (works for SQLite and server databases)"""
         if not self.engine:
             return {"status": "disconnected", "type": "unknown"}
-        
+
+        dialect = self.engine.dialect.name
         try:
             with self.engine.connect() as conn:
-                # For SQLite, get database file info
-                result = conn.execute(text("PRAGMA database_list"))
-                db_info = result.fetchone()
-                
+                if dialect == 'sqlite':
+                    row = conn.execute(text("PRAGMA database_list")).fetchone()
+                    database = row[2] if row else "unknown"
+                else:
+                    database = conn.execute(text("SELECT current_database()")).scalar()
+
                 return {
                     "status": "connected",
-                    "type": "sqlite",
-                    "database": db_info[2] if db_info else "unknown",
-                    "url": str(self.engine.url).replace(str(self.engine.url.password), '***') if self.engine.url.password else str(self.engine.url)
+                    "type": dialect,
+                    "database": database,
+                    "url": self.engine.url.render_as_string(hide_password=True),
                 }
         except Exception as e:
             return {
                 "status": "error",
-                "type": "sqlite",
+                "type": dialect,
                 "error": str(e)
             }
-    
+
     def close(self):
         """Close the database connection"""
         try:
